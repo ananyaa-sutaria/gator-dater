@@ -25,6 +25,15 @@ type Screen =
 
 type Tab = 'calendar' | 'planner' | 'swipe' | 'chats' | 'profile-tab';
 type FirestoreHealth = 'unknown' | 'connected' | 'fallback';
+type Dater = {
+  id: string;
+  name: string;
+  age: number;
+  yearAtUf: string;
+  bio: string;
+  compatibility: number;
+  vibe: string;
+};
 
 type SignUpState = {
   email: string;
@@ -75,6 +84,14 @@ const initialProfile: ProfileState = {
 };
 
 const yearOptions = ['Freshman', 'Sophomore', 'Junior', 'Senior', 'Graduate'];
+const sampleDaters: Dater[] = [
+  { id: 'leah', name: 'Leah', age: 21, yearAtUf: 'Junior', bio: 'Loves bookstores, matcha, and spontaneous Gainesville adventures.', compatibility: 92, vibe: 'Low-key creative' },
+  { id: 'ava', name: 'Ava', age: 20, yearAtUf: 'Sophomore', bio: 'Big on live music, sunset walks, and trying every coffee shop once.', compatibility: 88, vibe: 'Outgoing planner' },
+  { id: 'jordan', name: 'Jordan', age: 22, yearAtUf: 'Senior', bio: 'Gym in the morning, tacos at night, and always down for a campus event.', compatibility: 86, vibe: 'Active and social' },
+  { id: 'maya', name: 'Maya', age: 21, yearAtUf: 'Junior', bio: 'Film photos, thrift finds, and dessert-first kind of dates.', compatibility: 94, vibe: 'Artsy romantic' },
+  { id: 'nina', name: 'Nina', age: 19, yearAtUf: 'Freshman', bio: 'New to UF, loves boba, study dates, and trying cute hidden spots.', compatibility: 84, vibe: 'Sweet and curious' },
+  { id: 'sophia', name: 'Sophia', age: 23, yearAtUf: 'Graduate', bio: 'A good dinner reservation and an even better conversation win every time.', compatibility: 90, vibe: 'Confident foodie' },
+];
 
 const normalizeEmail = (email: string) => email.trim().toLowerCase();
 const isUflEmail = (email: string) => normalizeEmail(email).endsWith('@ufl.edu');
@@ -98,6 +115,9 @@ export default function App() {
   const [verificationEmail, setVerificationEmail] = useState('');
   const [activeTab, setActiveTab] = useState<Tab>('swipe');
   const [firestoreHealth, setFirestoreHealth] = useState<FirestoreHealth>('unknown');
+  const [swipeIndex, setSwipeIndex] = useState(0);
+  const [likedDaters, setLikedDaters] = useState<Dater[]>([]);
+  const [likesModalOpen, setLikesModalOpen] = useState(false);
   const profilePhotoInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
@@ -727,7 +747,14 @@ export default function App() {
             <article className="home-tile">
               <p className="account-label">Session</p>
               <h3>Account controls</h3>
-              <p>Update settings later, or sign out below when you are done.</p>
+              <p>Review your saved likes or sign out below when you are done.</p>
+              <button
+                className="primary-button tile-button"
+                onClick={() => setLikesModalOpen(true)}
+                type="button"
+              >
+                View Likes ({likedDaters.length})
+              </button>
               <button className="secondary-button tile-button" onClick={handleSignOut} type="button">
                 Sign Out
               </button>
@@ -745,15 +772,31 @@ export default function App() {
           <p className="account-detail">This is the main page. Browse profiles and decide who you want to know better.</p>
         </section>
         <section className="swipe-stack">
-          <article className="swipe-card">
-            <p className="account-label">92% match</p>
-            <h3>Leah, 21</h3>
-            <p>Junior at UF. Loves bookstores, matcha, and spontaneous Gainesville adventures.</p>
-          </article>
+          {currentDater ? (
+            <article className="swipe-card">
+              <p className="account-label">{currentDater.compatibility}% match</p>
+              <h3>
+                {currentDater.name}, {currentDater.age}
+              </h3>
+              <p>{currentDater.yearAtUf}</p>
+              <p>{currentDater.bio}</p>
+              <p className="swipe-vibe">{currentDater.vibe}</p>
+            </article>
+          ) : (
+            <article className="swipe-card done-card">
+              <p className="account-label">All caught up</p>
+              <h3>No more sample daters</h3>
+              <p>Open your likes from Profile or come back later for more people.</p>
+            </article>
+          )}
         </section>
         <div className="swipe-actions">
-          <button className="secondary-button swipe-button" type="button">Pass</button>
-          <button className="primary-button swipe-button" type="button">Like</button>
+          <button className="secondary-button swipe-button" type="button" onClick={handlePass} disabled={!currentDater}>
+            Pass
+          </button>
+          <button className="primary-button swipe-button" type="button" onClick={handleLike} disabled={!currentDater}>
+            Like
+          </button>
         </div>
       </>
     );
@@ -765,6 +808,32 @@ export default function App() {
       : firestoreHealth === 'fallback'
         ? 'Local fallback'
         : 'Firestore unknown';
+  const currentDater = sampleDaters[swipeIndex] || null;
+
+  const handleLike = () => {
+    if (!currentDater) {
+      return;
+    }
+
+    setLikedDaters((current) =>
+      current.some((dater) => dater.id === currentDater.id)
+        ? current
+        : [...current, currentDater],
+    );
+    setSwipeIndex((current) => current + 1);
+  };
+
+  const handlePass = () => {
+    if (!currentDater) {
+      return;
+    }
+
+    setSwipeIndex((current) => current + 1);
+  };
+
+  const handleUnlike = (daterId: string) => {
+    setLikedDaters((current) => current.filter((dater) => dater.id !== daterId));
+  };
 
   if (screen === 'signup-email') {
     return renderFrame(
@@ -1017,6 +1086,42 @@ export default function App() {
           <div className="tab-indicator">{activeTab}</div>
         </div>
       </div>
+      {likesModalOpen ? (
+        <div className="likes-modal">
+          <div className="likes-modal-card">
+            <div className="likes-modal-header">
+              <div>
+                <p className="account-label">Likes</p>
+                <h2>Saved matches</h2>
+              </div>
+              <button className="link-button" type="button" onClick={() => setLikesModalOpen(false)}>
+                Close
+              </button>
+            </div>
+            {likedDaters.length ? (
+              <div className="likes-list">
+                {likedDaters.map((dater) => (
+                  <article key={dater.id} className="liked-card">
+                    <div>
+                      <p className="account-label">{dater.compatibility}% match</p>
+                      <h3>
+                        {dater.name}, {dater.age}
+                      </h3>
+                      <p>{dater.yearAtUf}</p>
+                      <p>{dater.vibe}</p>
+                    </div>
+                    <button className="secondary-button unlike-button" type="button" onClick={() => handleUnlike(dater.id)}>
+                      Unlike
+                    </button>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <p className="account-detail">No likes yet. Use the Swipe tab to save a few people here.</p>
+            )}
+          </div>
+        </div>
+      ) : null}
       {renderTabContent()}
       <nav className="tab-bar" aria-label="Primary">
         <button
