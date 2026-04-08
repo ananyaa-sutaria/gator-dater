@@ -1,34 +1,84 @@
+@import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Yellowtail:ital,wght@0,400&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Zilla+Slab:ital,wght@0,400&display=swap');
+
 :root {
-  font-family: Georgia, "Times New Roman", serif;
-  color: #222;
-  background: #1f1f1f;
-  line-height: 1.5;
-  font-weight: 400;
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+  --color-whitePink: #FFF6F9;
+  --color-lightPink: #FFC8DD;
+  --color-pink: #FFAFCC;
+  --color-lightBlue: #BDE0FE;
+  --color-blue: #A2D2FF;
+  --color-lightGreen: #DDFFF7;
+  --color-green: #93E1D8;
+  --color-darkPink: #DF669E;
+  --color-blackPink: #861657;
+}
+
+@layer utilities {
+
+  /* Hide scrollbar for Chrome, Safari and Opera */
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Hide scrollbar for IE, Edge and Firefox */
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    /* IE and Edge */
+    scrollbar-width: none;
+    /* Firefox */
+  }
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  font-size: clamp(14px, 2vw, 16px);
+}
+
+.no-scrollbar,
+.screen,
+.phone-content,
+.phone-shell {
+  -ms-overflow-style: none;
+  /* IE and Edge */
+  scrollbar-width: none;
+  /* Firefox */
+}
+
+.no-scrollbar::-webkit-scrollbar,
+.screen::-webkit-scrollbar,
+.phone-content::-webkit-scrollbar {
+  display: none;
+  /* Chrome, Safari, Opera */
 }
 
 * {
   box-sizing: border-box;
 }
 
-body {
-  margin: 0;
-  min-width: 320px;
-  min-height: 100vh;
-  background: #1f1f1f;
+p,
+h1,
+h2,
+h3 {
+  max-width: 100%;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
 }
 
-button,
-input,
-select {
-  font: inherit;
+h1 {
+  font-family: 'Yellowtail', cursive;
 }
 
-#root {
-  min-height: 100vh;
+p,
+h2,
+h3,
+label,
+button {
+  font-family: 'Zilla Slab', serif;
 }
 
 code {
@@ -39,31 +89,50 @@ code {
 }
 
 .app-shell {
-  min-height: 100vh;
+  height: 100vh;
+  width: 100vw;
   display: grid;
   place-items: center;
-  padding: 1.5rem;
-}
-
-.phone-shell {
-  width: min(100%, 390px);
-  min-height: 760px;
-  padding: 1rem 1rem 1.5rem;
-  background: #fff;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.28);
+  background: #1f1f1f;
   overflow: hidden;
 }
 
+.phone-shell {
+  width: min(100vw, calc(100vh * 393 / 852));
+  height: min(100vh, calc(100vw * 852 / 393));
+  aspect-ratio: 393 / 852;
+  position: relative;
+  overflow: hidden;
+  background: white;
+  container-type: size;
+}
+
+.phone-content {
+  width: 100%;
+  height: 100%;
+  position: relative;
+}
+
 .screen {
-  min-height: 690px;
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  overflow-y: auto;
+}
+
+.screen {
   display: flex;
   flex-direction: column;
 }
 
 .intro-screen {
+  display: flex;
+  flex-direction: column;
   justify-content: space-between;
-  padding-top: 1rem;
+  height: 100%;
+  width: 100%;
+  padding: 10cqw;
+  box-sizing: border-box;
 }
 
 .form-screen,
@@ -85,70 +154,23 @@ code {
 
 .script-title {
   margin: 0;
-  font-family: "Brush Script MT", "Snell Roundhand", cursive;
-  font-size: clamp(2.9rem, 9vw, 3.6rem);
-  line-height: 0.95;
+  font-family: 'Yellowtail', cursive;
+  font-size: 18cqw;
+  line-height: 1.4;
   font-weight: 400;
 }
 
-.intro-copy p,
-.form-copy p,
-.status-text,
-.error-text,
-.home-tile p,
-.welcome-panel p {
-  font-family: Georgia, "Times New Roman", serif;
+h2 {
+  font-size: 9.2cqw;
 }
 
-.intro-copy p,
-.form-copy p {
-  margin: 0.5rem auto 0;
-  max-width: 16rem;
-  color: #444;
-  font-size: 0.95rem;
+h3,
+button {
+  font-size: 5.1cqw;
 }
 
-.gator-art {
-  position: relative;
-  width: 100%;
-  height: 86px;
-}
-
-.gator-art::before,
-.gator-art::after {
-  content: "";
-  position: absolute;
-  border: 3px solid #a5a5a5;
-}
-
-.gator-top::before,
-.gator-bottom::before,
-.gator-center::before {
-  width: 84px;
-  height: 24px;
-  left: 52%;
-  top: 18px;
-  border-radius: 14px 16px 14px 18px;
-  transform: translateX(-50%) rotate(2deg);
-}
-
-.gator-top::after,
-.gator-bottom::after,
-.gator-center::after {
-  width: 118px;
-  height: 34px;
-  left: 48%;
-  top: 34px;
-  border-top: 0;
-  border-radius: 8px 12px 18px 14px;
-  transform: translateX(-50%);
-}
-
-.heart-mark {
-  text-align: center;
-  color: #9d9d9d;
-  font-size: 2.2rem;
-  margin-top: -0.5rem;
+p {
+  font-size: 4.1cqw;
 }
 
 .button-stack,
@@ -159,49 +181,72 @@ code {
   gap: 0.9rem;
 }
 
+button,
 .primary-button,
-.secondary-button {
-  width: 100%;
-  border: 0;
-  border-radius: 8px;
-  padding: 0.85rem 1rem;
-  background: #9a9a9a;
-  color: #fff;
-  cursor: pointer;
-}
-
-.secondary-button {
-  background: #b5b5b5;
-}
-
-.compact-button {
-  width: auto;
-  padding-inline: 1rem;
-}
-
+.secondary-button,
+.compact-button,
 .tile-button {
-  margin-top: 0.9rem;
-}
+  display: flex !important;
+  background-color: var(--color-darkPink) !important;
+  color: var(--color-whitePink) !important;
 
-.back-button,
-.link-button {
-  border: 0;
-  background: transparent;
-  color: #7a7a7a;
-  padding: 0;
+  width: 100%;
+  height: 12.7cqw;
+  justify-content: center;
+  align-items: center;
+
+  border: none;
+  border-radius: 10px;
   cursor: pointer;
+  font-family: 'Zilla Slab', serif;
+  font-size: 5.1cqw;
+
+
+  appearance: none;
+  -webkit-appearance: none;
 }
 
-.back-button {
-  align-self: flex-start;
-  font-size: 1.8rem;
-  line-height: 1;
-  margin-bottom: 1rem;
+button:active {
+  opacity: 0.8;
+  transform: scale(0.98);
 }
 
-.link-button {
-  text-decoration: underline;
-  font-size: 0.9rem;
+.gator-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.gator-1 {
+  position: absolute;
+  width: 175cqw;
+  height: auto;
+  top: 18cqh;
+  left: 32cqw;
+  object-fit: contain;
+  opacity: 0.5;
+}
+
+.gator-2 {
+  position: absolute;
+  width: 200cqw;
+  height: auto;
+  top: 45cqh;
+  right: 32cqw;
+  transform: scaleX(-1);
+  transform-origin: center;
+  object-fit: contain;
+  opacity: 0.5;
+}
+
+.gator-heart {
+  position: absolute;
+  width: 15cqw;
+  height: auto;
+  top: 5cqh;
+  left: 45cqw;
+  z-index: 1;
 }
 
 .auth-form {
@@ -512,21 +557,4 @@ code {
 .tab-icon {
   font-size: 1rem;
   line-height: 1;
-}
-
-@media (max-width: 480px) {
-  .app-shell {
-    padding: 0;
-  }
-
-  .phone-shell {
-    width: 100%;
-    min-height: 100vh;
-    border: 0;
-    box-shadow: none;
-  }
-
-  .screen {
-    min-height: calc(100vh - 3.5rem);
-  }
 }

@@ -11,7 +11,13 @@ import {
 } from 'firebase/auth';
 import { doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore';
 import { auth, db, isFirebaseConfigured } from './firebase';
+import gatorImage from '../assets/PLEASE REPLACE.png';
+import heartIcon from '../assets/heartIcon.png';
+import backArrrow from '../assets/backArrowIcon.png';
 import './index.css';
+
+const gatorImg = gatorImage;
+const heartImg = heartIcon;
 
 type Screen =
   | 'intro'
@@ -598,31 +604,37 @@ export default function App() {
   const renderFrame = (content: ReactNode) => (
     <main className="app-shell">
       <section className="phone-shell">
-        {!isFirebaseConfigured ? (
-          <div className="notice warning">
-            Firebase is not configured yet. Add your keys to
-            <code> gator-dater-app/.env </code>
-            first.
-          </div>
-        ) : null}
-        {content}
-        {status ? <p className="status-text">{status}</p> : null}
-        {error ? <p className="error-text">{error}</p> : null}
+        <div className="phone-content">
+          {!isFirebaseConfigured ? (
+            <div className="notice warning">
+              Firebase is not configured yet. Add your keys to
+              <code> gator-dater-app/.env </code>
+              first.
+            </div>
+          ) : null}
+          {content}
+          {/* {status ? <p className="status-text">{status}</p> : null} */}
+          {/* {error ? <p className="error-text">{error}</p> : null} */}
+        </div>
       </section>
     </main>
   );
 
   if (screen === 'intro') {
     return renderFrame(
-      <div className="screen intro-screen">
-        <div className="gator-art gator-top" />
-        <div className="intro-copy">
-          <h1 className="script-title">Gator Dator</h1>
-          <p>Form genuine connections in a comfortable, campus-friendly environment.</p>
+      <div className="screen intro-screen" style={{ position: 'relative' }}>
+        <div className="intro-copy" style={{ zIndex: 10 }}>
+          <h1 className="script-title">GatorDator</h1>
+          <h3>Form genuine connections in a comfortable, campus-friendly environment</h3>
         </div>
-        <div className="heart-mark">♡</div>
-        <div className="gator-art gator-bottom" />
-        <div className="button-stack">
+
+        <div className="gator-layer">
+          <img src={gatorImg} className="gator-1" alt="Gator Top" />
+          <img src={heartImg} className="gator-heart" alt="Heart" />
+          <img src={gatorImg} className="gator-2" alt="Gator Bottom" />
+        </div>
+        
+        <div className="button-stack" style={{ zIndex: 10 }}>
           <button className="primary-button" onClick={() => setScreen('signup-email')}>
             Get Started
           </button>
@@ -643,12 +655,14 @@ export default function App() {
             <h2>Saved dates and upcoming plans</h2>
             <p className="account-detail">Keep every coffee, study date, and dinner plan in one place.</p>
           </section>
+
           <section className="home-grid">
             <article className="home-tile">
               <p className="account-label">Friday</p>
               <h3>Pascal's Coffeehouse</h3>
               <p>7:00 PM with Maya. Saved as a casual first date near campus.</p>
             </article>
+
             <article className="home-tile">
               <p className="account-label">Planner</p>
               <h3>Need another idea?</h3>
@@ -667,12 +681,14 @@ export default function App() {
             <h2>AI-assisted local date ideas</h2>
             <p className="account-detail">Describe the kind of date you want and get Gainesville-friendly suggestions.</p>
           </section>
+
           <section className="home-grid">
             <article className="home-tile">
               <p className="account-label">Prompt</p>
               <h3>Cheap and low-key</h3>
               <p>Think coffee, a walk by Lake Alice, and dessert after if the vibe is good.</p>
             </article>
+
             <article className="home-tile">
               <p className="account-label">Spot idea</p>
               <h3>Depot Park picnic</h3>
@@ -691,6 +707,7 @@ export default function App() {
             <h2>Keep the conversation moving</h2>
             <p className="account-detail">Jump back into recent messages and plan the next step.</p>
           </section>
+          
           <section className="home-grid">
             <article className="home-tile">
               <p className="account-label">New</p>
@@ -839,7 +856,7 @@ export default function App() {
     return renderFrame(
       <div className="screen form-screen">
         <button className="back-button" onClick={handleBack} type="button">
-          ←
+          <img src={backArrrow} alt="Back Arrow" />
         </button>
         <div className="form-copy">
           <h1 className="script-title">Sign Up</h1>
