@@ -14,10 +14,12 @@ import { auth, db, isFirebaseConfigured } from './firebase';
 import gatorImage from '../assets/PLEASE REPLACE.png';
 import heartIcon from '../assets/heartIcon.png';
 import backArrrow from '../assets/backArrowIcon.png';
+import youreAllSet from '../assets/youreAllSet.png';
 import './index.css';
 
 const gatorImg = gatorImage;
 const heartImg = heartIcon;
+const youreAllSetImg = youreAllSet;
 
 type Screen =
   | 'intro'
@@ -854,14 +856,16 @@ export default function App() {
 
   if (screen === 'signup-email') {
     return renderFrame(
-      <div className="screen form-screen">
+      <div className="screen info-screen">
         <button className="back-button" onClick={handleBack} type="button">
           <img src={backArrrow} alt="Back Arrow" />
         </button>
+
         <div className="form-copy">
           <h1 className="script-title">Sign Up</h1>
-          <p>Start making more connections.</p>
+          <h3>Start making more connections.</h3>
         </div>
+
         <form className="auth-form" onSubmit={handleCreateEmailStep}>
           <label>
             Email
@@ -873,8 +877,8 @@ export default function App() {
               required
             />
           </label>
-          <button className="primary-button" type="submit">
-            Continue
+          <button className="primary-button" type="submit" disabled={loading}>
+            {loading ? 'Working...' : 'Continue'}
           </button>
         </form>
         <div className="gator-art gator-bottom" />
@@ -884,13 +888,15 @@ export default function App() {
 
   if (screen === 'signup-password') {
     return renderFrame(
-      <div className="screen form-screen">
+      <div className="screen info-screen">
         <button className="back-button" onClick={handleBack} type="button">
-          ←
+          <img src={backArrrow} alt="Back Arrow" />
         </button>
+
         <div className="form-copy">
           <h1 className="script-title">Create your Password</h1>
         </div>
+
         <form className="auth-form" onSubmit={handleCreateAccount}>
           <label>
             Password
@@ -915,21 +921,16 @@ export default function App() {
 
   if (screen === 'signup-verification') {
     return renderFrame(
-      <div className="screen verification-screen">
+      <div className="screen info-screen">
         <button className="back-button" onClick={handleBack} type="button">
-          ←
+          <img src={backArrrow} alt="Back Arrow" />
         </button>
         <div className="form-copy">
           <h1 className="script-title">Verification</h1>
-          <p>
-            A code has been sent to your UFL email.
+          <h3>
+            A code has been sent to your UFL email:
             {verificationEmail ? ` ${verificationEmail}` : ''}
-          </p>
-        </div>
-        <div className="code-row" aria-hidden="true">
-          {Array.from({ length: 6 }).map((_, index) => (
-            <span key={index} className="code-box" />
-          ))}
+          </h3>
         </div>
         <button className="primary-button" type="button" onClick={() => setScreen('signin')}>
           Continue
@@ -943,13 +944,13 @@ export default function App() {
 
   if (screen === 'signin') {
     return renderFrame(
-      <div className="screen form-screen">
+      <div className="screen info-screen">
         <button className="back-button" onClick={handleBack} type="button">
-          ←
+          <img src={backArrrow} alt="Back Arrow" />
         </button>
         <div className="form-copy">
           <h1 className="script-title">Hello Again!</h1>
-          <p>Keep making more connections.</p>
+          <h3>Keep making more connections.</h3>
         </div>
         <form className="auth-form" onSubmit={handleSignIn}>
           <label>
@@ -994,17 +995,28 @@ export default function App() {
 
   if (screen === 'profile') {
     return renderFrame(
-      <div className="screen form-screen">
-        <button className="back-button" onClick={handleSignOut} type="button">
-          ←
+      <div className="screen info-screen">
+        <button className="back-button" onClick={handleBack} type="button">
+          <img src={backArrrow} alt="Back Arrow" />
         </button>
         <div className="form-copy">
           <h1 className="script-title">So tell me about yourself</h1>
         </div>
         <form className="auth-form" onSubmit={handleProfileSubmit}>
-          <label>
-            Add a profile picture
-            <input type="file" accept="image/*" onChange={handlePhotoChange} />
+          <label className="photo-upload-label">
+            Profile Photo
+            <div className="file-input-wrapper">
+              <input
+                type="file"
+                accept="image/*"
+                onChange={handlePhotoChange}
+                className="hidden-file-input"
+                ref={profilePhotoInputRef}
+              />
+              <div className="custom-file-button">
+                {profileForm.photoUrl ? 'Change Photo' : 'Choose Photo'}
+              </div>
+            </div>
           </label>
           {profileForm.photoUrl ? (
             <div className="profile-photo-wrap">
@@ -1051,18 +1063,16 @@ export default function App() {
             />
           </label>
           <label>
-            What's your year at UF?
+            Year at UF
             <select
               value={profileForm.yearAtUf}
-              onChange={(event) =>
-                setProfileForm((current) => ({ ...current, yearAtUf: event.target.value }))
-              }
+              onChange={(e) => setProfileForm({ ...profileForm, yearAtUf: e.target.value })}
               required
             >
-              <option value="">Select</option>
-              {yearOptions.map((option) => (
-                <option key={option} value={option}>
-                  {option}
+              <option value="" disabled>Select your year</option>
+              {yearOptions.map((year) => (
+                <option key={year} value={year}>
+                  {year}
                 </option>
               ))}
             </select>
@@ -1077,11 +1087,10 @@ export default function App() {
 
   if (screen === 'all-set') {
     return renderFrame(
-      <div className="screen all-set-screen">
-        <div className="speech-card">
-          <h1 className="script-title">You're All Set!</h1>
-        </div>
-        <div className="gator-art gator-center" />
+      <div className="screen info-screen">
+        <img src={youreAllSetImg} alt="You're All Set!" />
+        <img src={gatorImg} className="gator-set" alt="Gator" />
+        <div style={{ height: '15cqh' }} />
         <button className="primary-button" type="button" onClick={handleContinueFromAllSet}>
           Continue
         </button>
