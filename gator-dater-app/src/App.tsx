@@ -69,6 +69,7 @@ type ProfileState = {
   lastName: string;
   age: string;
   yearAtUf: string;
+  bio: string;
   photoUrl: string;
   intention: string;
   genderIdentity: string;
@@ -111,6 +112,7 @@ type UserProfile = {
   name: string;
   age: number;
   yearAtUf: string;
+  bio: string;
   gender: string;
   genderPreference: string;
   intentionOpenTo: string;
@@ -150,6 +152,7 @@ const initialProfile: ProfileState = {
   lastName: '',
   age: '',
   yearAtUf: '',
+  bio: '',
   photoUrl: '',
   intention: 'either',
   genderIdentity: '',
@@ -253,6 +256,7 @@ const sampleDiscoveryProfiles: Array<Partial<UserProfile> & { uid: string }> = [
     fullName: 'Leah R',
     age: 21,
     yearAtUf: 'Junior',
+    bio: 'Quiet reader who loves coffee shop hangs and movie nights.',
     gender: 'woman',
     intention: 'dating',
     interests: ['Reading', 'Coffee shops', 'Photography', 'Film'],
@@ -280,6 +284,7 @@ const sampleDiscoveryProfiles: Array<Partial<UserProfile> & { uid: string }> = [
     fullName: 'Ethan M',
     age: 20,
     yearAtUf: 'Sophomore',
+    bio: 'Outgoing and social, always down to try a new spot in town.',
     gender: 'man',
     intention: 'dating',
     interests: ['Concerts', 'Thrifting', 'Coffee shops', 'Travel'],
@@ -307,6 +312,7 @@ const sampleDiscoveryProfiles: Array<Partial<UserProfile> & { uid: string }> = [
     fullName: 'Jordan T',
     age: 22,
     yearAtUf: 'Senior',
+    bio: 'Gym regular who likes active first dates and football weekends.',
     gender: 'man',
     intention: 'either',
     interests: ['Gym', 'Football games', 'Pickleball', 'Hiking'],
@@ -334,6 +340,7 @@ const sampleDiscoveryProfiles: Array<Partial<UserProfile> & { uid: string }> = [
     fullName: 'Dylan Cruz',
     age: 21,
     yearAtUf: 'Junior',
+    bio: 'Low-key gamer and foodie who likes good playlists and better conversation.',
     gender: 'man',
     intention: 'dating',
     interests: ['Board games', 'Coffee shops', 'Trying new restaurants', 'Music', 'Gaming', 'Travel'],
@@ -361,6 +368,7 @@ const sampleDiscoveryProfiles: Array<Partial<UserProfile> & { uid: string }> = [
     fullName: 'Noah S',
     age: 21,
     yearAtUf: 'Junior',
+    bio: 'Creative and thoughtful, happiest with art, film, and chill weekends.',
     gender: 'man',
     intention: 'friendship',
     interests: ['Painting', 'Film', 'Photography', 'Board games'],
@@ -388,6 +396,7 @@ const sampleDiscoveryProfiles: Array<Partial<UserProfile> & { uid: string }> = [
     fullName: 'Nina K',
     age: 19,
     yearAtUf: 'Freshman',
+    bio: 'Friendly and easygoing, into coffee runs, trivia nights, and games.',
     gender: 'woman',
     intention: 'either',
     interests: ['Coffee shops', 'Reading', 'Gaming', 'Trivia nights'],
@@ -415,6 +424,7 @@ const sampleDiscoveryProfiles: Array<Partial<UserProfile> & { uid: string }> = [
     fullName: 'Liam L',
     age: 23,
     yearAtUf: 'Graduate',
+    bio: 'Planner with foodie energy who enjoys weekend adventures and live music.',
     gender: 'man',
     intention: 'dating',
     interests: ['Trying new restaurants', 'Travel', 'Music', 'Cooking'],
@@ -518,13 +528,15 @@ const profileToDater = (profileEntry: UserProfile): Dater => {
     age: profileEntry.age,
     yearAtUf: profileEntry.yearAtUf || 'UF Student',
     bio:
+      profileEntry.bio ||
       [
         labelForIntention(profileEntry.intention),
         interestSummary,
         profileEntry.dateBudget ? `Budget: ${profileEntry.dateBudget}` : '',
       ]
         .filter(Boolean)
-        .join(' · ') || 'New connection at UF',
+        .join(' · ') ||
+      'New connection at UF',
     compatibility: 0,
     vibe: topVibe,
   };
@@ -568,6 +580,7 @@ const normalizeUserProfile = (rawProfile: Partial<UserProfile>, uid: string): Us
     name: rawProfile.name || fullName,
     age: Number(rawProfile.age) || 18,
     yearAtUf: rawProfile.yearAtUf || '',
+    bio: rawProfile.bio || '',
     gender: rawProfile.gender || preferences.genderIdentity,
     genderPreference: rawProfile.genderPreference || preferences.genderPreference,
     intentionOpenTo: rawProfile.intentionOpenTo || preferences.intentionOpenTo,
@@ -731,6 +744,15 @@ export default function App() {
     });
   }, [currentUser, profile, screen]);
 
+  useEffect(() => {
+    if (!currentUser || !profile) {
+      setLikedDaters([]);
+      return;
+    }
+
+    void loadLikedDaters(profile);
+  }, [currentUser, profile]);
+
   const resetMessages = () => {
     setError('');
     setStatus('');
@@ -799,6 +821,7 @@ export default function App() {
         '',
       age: profile?.age || Number(profileForm.age) || 18,
       yearAtUf: profile?.yearAtUf || profileForm.yearAtUf || '',
+      bio: profile?.bio || profileForm.bio || '',
       gender: profile?.gender || nextPreferences.genderIdentity,
       genderPreference: profile?.genderPreference || nextPreferences.genderPreference,
       intentionOpenTo: profile?.intentionOpenTo || nextPreferences.intentionOpenTo,
@@ -1157,6 +1180,7 @@ export default function App() {
         name: fullName,
         age: Number(profileForm.age),
         yearAtUf: profileForm.yearAtUf,
+        bio: profileForm.bio.trim(),
         gender: nextPreferences.genderIdentity,
         genderPreference: nextPreferences.genderPreference,
         intentionOpenTo: nextPreferences.intentionOpenTo,
@@ -1217,6 +1241,7 @@ export default function App() {
           name: fullName,
           age: Number(profileForm.age),
           yearAtUf: profileForm.yearAtUf,
+          bio: profileForm.bio.trim(),
           gender: nextPreferences.genderIdentity,
           genderPreference: nextPreferences.genderPreference,
           intentionOpenTo: nextPreferences.intentionOpenTo,
@@ -1356,6 +1381,7 @@ export default function App() {
       name: fullName,
       age: profile?.age || Number(profileForm.age) || 18,
       yearAtUf: profile?.yearAtUf || profileForm.yearAtUf || '',
+      bio: profile?.bio || profileForm.bio || '',
       gender: nextPreferences.genderIdentity,
       genderPreference: nextPreferences.genderPreference,
       intentionOpenTo: nextPreferences.intentionOpenTo,
@@ -1527,6 +1553,56 @@ export default function App() {
     setMatchedDaters(matchDocs.filter((match): match is Dater => Boolean(match)));
   };
 
+  const loadLikedDaters = async (currentProfile: UserProfile) => {
+    if (!currentProfile.likedUsers.length) {
+      setLikedDaters([]);
+      return;
+    }
+
+    const sampleProfileMap = new Map(
+      sampleDiscoveryProfiles.map((sampleProfile) => [
+        sampleProfile.uid,
+        normalizeUserProfile(sampleProfile, sampleProfile.uid),
+      ]),
+    );
+
+    const likedCards = await Promise.all(
+      currentProfile.likedUsers.map(async (likedUserId) => {
+        if (db) {
+          try {
+            const likedUserDoc = await getDoc(doc(db, 'users', likedUserId));
+
+            if (likedUserDoc.exists()) {
+              const likedProfile = normalizeUserProfile(
+                likedUserDoc.data() as Partial<UserProfile>,
+                likedUserId,
+              );
+              return {
+                ...profileToDater(likedProfile),
+                compatibility: compareProfilesByPreferences(currentProfile, likedProfile),
+              };
+            }
+          } catch {
+            // Fall back to local sample profile map when Firestore fetch fails.
+          }
+        }
+
+        const sampleFallback = sampleProfileMap.get(likedUserId);
+
+        if (sampleFallback) {
+          return {
+            ...profileToDater(sampleFallback),
+            compatibility: compareProfilesByPreferences(currentProfile, sampleFallback),
+          };
+        }
+
+        return null;
+      }),
+    );
+
+    setLikedDaters(likedCards.filter((card): card is Dater => Boolean(card)));
+  };
+
   const handleSignOut = async () => {
     if (!auth) {
       return;
@@ -1536,6 +1612,7 @@ export default function App() {
     setProfile(null);
     setScreen('intro');
     setStatus('Signed out.');
+    setLikedDaters([]);
     setMatchesModalOpen(false);
     setMatchedDaters([]);
   };
@@ -1699,6 +1776,7 @@ export default function App() {
               <p className="account-label">About</p>
               <h3>{profile?.yearAtUf || 'UF Student'}</h3>
               <p>{profile?.age ? `${profile.age} years old` : 'Add more details to make matching better.'}</p>
+              <p>{profile?.bio || 'Add a bio so people can get to know you.'}</p>
               <p>Intent: {profile?.intention || 'Open'}</p>
               <p>Show me: {profile?.genderPreference || 'Any'}</p>
               <p>Open to: {profile?.intentionOpenTo || 'Open to anything'}</p>
@@ -1900,6 +1978,26 @@ export default function App() {
 
   const handleUnlike = (daterId: string) => {
     setLikedDaters((current) => current.filter((dater) => dater.id !== daterId));
+
+    if (!currentUser || !profile) {
+      return;
+    }
+
+    const nextLikedUsers = profile.likedUsers.filter((likedUserId) => likedUserId !== daterId);
+    const nextProfile = { ...profile, likedUsers: nextLikedUsers };
+
+    setProfile(nextProfile);
+    saveLocalProfile(currentUser.uid, nextProfile);
+
+    if (db) {
+      void setDoc(
+        doc(db, 'users', currentUser.uid),
+        { likedUsers: nextLikedUsers },
+        { merge: true },
+      ).catch(() => {
+        setFirestoreHealth('fallback');
+      });
+    }
   };
 
   if (screen === 'signup-email') {
@@ -2124,6 +2222,20 @@ export default function App() {
                 </option>
               ))}
             </select>
+          </label>
+          <label>
+            Bio
+            {/* Keep this textarea as the place where users type and edit their bio. */}
+            <textarea
+              value={profileForm.bio}
+              onChange={(event) =>
+                setProfileForm((current) => ({ ...current, bio: event.target.value }))
+              }
+              placeholder="Tell people a little about yourself"
+              rows={3}
+              maxLength={220}
+              required
+            />
           </label>
           <button className="primary-button" type="submit" disabled={loading}>
             {loading ? 'Saving...' : 'Continue'}
