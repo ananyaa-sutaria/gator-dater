@@ -25,11 +25,25 @@ import gatorImage from '../assets/PLEASE REPLACE.png';
 import heartIcon from '../assets/heartIcon.png';
 import backArrrow from '../assets/backArrowIcon.png';
 import youreAllSet from '../assets/youreAllSet.png';
+import calenderIcon from '../assets/calenderIcon.png';
+import writeIcon from '../assets/writeIcon.png';
+import heartNavIcon from '../assets/heartNavIcon.png';
+import chatIcon from '../assets/chatIcon.png';
+import userIcon from '../assets/userIcon.png';
+import likeIcon from '../assets/likeIcon.png';
+import dislikeIcon from '../assets/dislikeIcon.png';
 import './index.css';
 
 const gatorImg = gatorImage;
 const heartImg = heartIcon;
 const youreAllSetImg = youreAllSet;
+const calenderImg = calenderIcon;
+const writeImg = writeIcon;
+const heartNavImg = heartNavIcon;
+const chatImg = chatIcon;
+const userImg = userIcon;
+const likeImg = likeIcon;
+const dislikeImg = dislikeIcon;
 
 type Screen =
   | 'intro'
@@ -1649,7 +1663,7 @@ export default function App() {
           <img src={heartImg} className="gator-heart" alt="Heart" />
           <img src={gatorImg} className="gator-2" alt="Gator Bottom" />
         </div>
-        
+
         <div className="button-stack" style={{ zIndex: 10 }}>
           <button className="primary-button" onClick={() => setScreen('signup-email')}>
             Get Started
@@ -1723,7 +1737,7 @@ export default function App() {
             <h2>Keep the conversation moving</h2>
             <p className="account-detail">Jump back into recent messages and plan the next step.</p>
           </section>
-          
+
           <section className="home-grid">
             <article className="home-tile">
               <p className="account-label">New</p>
@@ -1829,11 +1843,6 @@ export default function App() {
 
     return (
       <>
-        <section className="welcome-panel swipe-panel">
-          <p className="account-label">Main</p>
-          <h2>Swipe compatible people</h2>
-          <p className="account-detail">This is the main page. Browse profiles and decide who you want to know better.</p>
-        </section>
         <section className="swipe-stack">
           {currentDater ? (
             <article className="swipe-card">
@@ -2540,12 +2549,12 @@ export default function App() {
           <p className="eyebrow">Gator Dator</p>
           <h1 className="script-title">Home</h1>
         </div>
-        <div className="header-badges">
+        {/* <div className="header-badges">
           <div className={firestoreHealth === 'connected' ? 'health-pill healthy' : firestoreHealth === 'fallback' ? 'health-pill warning-pill' : 'health-pill'}>
             {firestoreLabel}
           </div>
           <div className="tab-indicator">{activeTab}</div>
-        </div>
+        </div> */}
       </div>
       {likesModalOpen ? (
         <div className="likes-modal">
@@ -2616,49 +2625,65 @@ export default function App() {
           </div>
         </div>
       ) : null}
-      {renderTabContent()}
-      <nav className="tab-bar" aria-label="Primary">
-        <button
-          className={activeTab === 'calendar' ? 'tab-button active' : 'tab-button'}
-          onClick={() => setActiveTab('calendar')}
-          type="button"
-        >
-          <span className="tab-icon">□</span>
-          <span>Dates</span>
-        </button>
-        <button
-          className={activeTab === 'planner' ? 'tab-button active' : 'tab-button'}
-          onClick={() => setActiveTab('planner')}
-          type="button"
-        >
-          <span className="tab-icon">✦</span>
-          <span>Plan</span>
-        </button>
-        <button
-          className={activeTab === 'swipe' ? 'tab-button active' : 'tab-button'}
-          onClick={() => setActiveTab('swipe')}
-          type="button"
-        >
-          <span className="tab-icon">♡</span>
-          <span>Swipe</span>
-        </button>
-        <button
-          className={activeTab === 'chats' ? 'tab-button active' : 'tab-button'}
-          onClick={() => setActiveTab('chats')}
-          type="button"
-        >
-          <span className="tab-icon">✉</span>
-          <span>Chats</span>
-        </button>
-        <button
-          className={activeTab === 'profile-tab' ? 'tab-button active' : 'tab-button'}
-          onClick={() => setActiveTab('profile-tab')}
-          type="button"
-        >
-          <span className="tab-icon">◌</span>
-          <span>Profile</span>
-        </button>
-      </nav>
+      <div className="nav-container">
+        {renderTabContent()}
+
+        <nav className="tab-bar">
+          {/* Background Rect */}
+          <div className="nav-bg" />
+
+          {/* Moving Circle - Positions itself based on activeTab */}
+          <div className={`active-indicator pos-${activeTab}`} />
+
+          <div className="icons-wrapper">
+            <div className="icons-wrapper-extra">
+              <button
+                className={activeTab === 'calendar' ? 'tab-button active' : 'tab-button'}
+                onClick={() => setActiveTab('calendar')}
+              >
+                <span className="tab-icon">
+                  <img src={calenderImg} alt="Calendar" />
+                </span>
+              </button>
+              <button
+                className={activeTab === 'planner' ? 'tab-button active' : 'tab-button'}
+                onClick={() => setActiveTab('planner')}
+              >
+                <span className="tab-icon">
+                  <img src={writeImg} alt="Write" />
+                </span>
+              </button>
+            </div>
+            <button
+              className={activeTab === 'swipe' ? 'tab-button active' : 'tab-button'}
+              onClick={() => setActiveTab('swipe')}
+            >
+              <span className="tab-icon">
+                <img src={heartNavImg} alt="Like" />
+              </span>
+            </button>
+            <div className="icons-wrapper-extra">
+              <button
+                className={activeTab === 'chats' ? 'tab-button active' : 'tab-button'}
+                onClick={() => setActiveTab('chats')}
+              >
+                <span className="tab-icon">
+                  <img src={chatImg} alt="Chats" />
+                </span>
+              </button>
+              <button
+                className={activeTab === 'profile-tab' ? 'tab-button active' : 'tab-button'}
+                onClick={() => setActiveTab('profile-tab')}
+              >
+                <span className="tab-icon">
+                  <img src={userImg} alt="Profile" />
+                </span>
+              </button>
+            </div>
+          </div>
+        </nav>
+      </div>
+
     </div>,
   );
 }
