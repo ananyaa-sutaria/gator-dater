@@ -73,6 +73,7 @@ type ProfileState = {
   intention: string;
   genderIdentity: string;
   genderPreference: string;
+  intentionOpenTo: string;
   ageRangeMin: string;
   ageRangeMax: string;
   vibeWords: string[];
@@ -88,6 +89,7 @@ type Preferences = {
   intention: string;
   genderIdentity: string;
   genderPreference: string;
+  intentionOpenTo: string;
   ageRange: {
     min: number;
     max: number;
@@ -111,6 +113,7 @@ type UserProfile = {
   yearAtUf: string;
   gender: string;
   genderPreference: string;
+  intentionOpenTo: string;
   ageRange: {
     min: number;
     max: number;
@@ -127,6 +130,7 @@ type UserProfile = {
   likedUsers: string[];
   passedUsers: string[];
   matches: string[];
+  blockedUsers: string[];
   onboardingCompleted: boolean;
   createdAt?: unknown;
 };
@@ -147,11 +151,12 @@ const initialProfile: ProfileState = {
   age: '',
   yearAtUf: '',
   photoUrl: '',
-  intention: 'open',
+  intention: 'either',
   genderIdentity: '',
-  genderPreference: 'any',
+  genderPreference: 'everyone',
+  intentionOpenTo: 'either',
   ageRangeMin: '18',
-  ageRangeMax: '25',
+  ageRangeMax: '26',
   vibeWords: [],
   socialEnergy: 50,
   dateBudget: 'low',
@@ -163,10 +168,9 @@ const initialProfile: ProfileState = {
 
 const yearOptions = ['Freshman', 'Sophomore', 'Junior', 'Senior', 'Graduate'];
 const datingIntentionOptions = [
-  { value: 'friends', label: 'Friendship' },
-  { value: 'casual', label: 'Casual dating' },
-  { value: 'serious', label: 'Serious relationship' },
-  { value: 'open', label: 'Open to anything' },
+  { value: 'friendship', label: 'Friendship' },
+  { value: 'dating', label: 'Dating' },
+  { value: 'either', label: 'Either' },
 ];
 const genderIdentityOptions = [
   { value: 'woman', label: 'Woman' },
@@ -179,7 +183,6 @@ const genderPreferenceOptions = [
   { value: 'women', label: 'Women' },
   { value: 'men', label: 'Men' },
   { value: 'everyone', label: 'Everyone' },
-  { value: 'any', label: 'Any' },
 ];
 const vibeWordOptions = [
   'Adventurous',
@@ -197,14 +200,14 @@ const vibeWordOptions = [
 ];
 const dateBudgetOptions = [
   { value: 'free', label: 'Free' },
-  { value: 'low', label: '$$' },
-  { value: 'mid', label: '$$$' },
+  { value: 'low', label: '$' },
+  { value: 'mid', label: '$$' },
 ];
 const dateVibeOptions = [
-  'Chill & lowkey',
-  'Active & outdoorsy',
-  'Cultural & artsy',
+  'Chill',
+  'Active',
   'Foodie',
+  'Artsy',
   'Surprise me',
 ];
 const distanceOptions = [
@@ -242,22 +245,206 @@ const interestOptions = [
   'Travel',
   'Volunteering',
 ];
-const sampleDaters: Dater[] = [
-  { id: 'leah', name: 'Leah', age: 21, yearAtUf: 'Junior', bio: 'Loves bookstores, matcha, and spontaneous Gainesville adventures.', compatibility: 92, vibe: 'Low-key creative' },
-  { id: 'ava', name: 'Ava', age: 20, yearAtUf: 'Sophomore', bio: 'Big on live music, sunset walks, and trying every coffee shop once.', compatibility: 88, vibe: 'Outgoing planner' },
-  { id: 'jordan', name: 'Jordan', age: 22, yearAtUf: 'Senior', bio: 'Gym in the morning, tacos at night, and always down for a campus event.', compatibility: 86, vibe: 'Active and social' },
-  { id: 'maya', name: 'Maya', age: 21, yearAtUf: 'Junior', bio: 'Film photos, thrift finds, and dessert-first kind of dates.', compatibility: 94, vibe: 'Artsy romantic' },
-  { id: 'nina', name: 'Nina', age: 19, yearAtUf: 'Freshman', bio: 'New to UF, loves boba, study dates, and trying cute hidden spots.', compatibility: 84, vibe: 'Sweet and curious' },
-  { id: 'sophia', name: 'Sophia', age: 23, yearAtUf: 'Graduate', bio: 'A good dinner reservation and an even better conversation win every time.', compatibility: 90, vibe: 'Confident foodie' },
+const sampleDiscoveryProfiles: Array<Partial<UserProfile> & { uid: string }> = [
+  {
+    uid: 'sample-leah',
+    firstName: 'Leah',
+    lastName: 'R',
+    fullName: 'Leah R',
+    age: 21,
+    yearAtUf: 'Junior',
+    gender: 'woman',
+    intention: 'dating',
+    interests: ['Reading', 'Coffee shops', 'Photography', 'Film'],
+    dateVibe: ['Artsy', 'Chill'],
+    dateBudget: 'low',
+    preferences: {
+      intention: 'dating',
+      genderIdentity: 'woman',
+      genderPreference: 'men',
+      intentionOpenTo: 'dating',
+      ageRange: { min: 20, max: 25 },
+      vibeWords: ['Artsy', 'Planner', 'Curious'],
+      socialEnergy: 45,
+      dateBudget: 'low',
+      dateVibe: ['Artsy', 'Chill'],
+      distance: 'near',
+      availability: ['weekends'],
+      interests: ['Reading', 'Coffee shops', 'Photography', 'Film'],
+    },
+  },
+  {
+    uid: 'sample-ava',
+    firstName: 'Ethan',
+    lastName: 'M',
+    fullName: 'Ethan M',
+    age: 20,
+    yearAtUf: 'Sophomore',
+    gender: 'man',
+    intention: 'dating',
+    interests: ['Concerts', 'Thrifting', 'Coffee shops', 'Travel'],
+    dateVibe: ['Foodie', 'Surprise me'],
+    dateBudget: 'mid',
+    preferences: {
+      intention: 'dating',
+      genderIdentity: 'man',
+      genderPreference: 'women',
+      intentionOpenTo: 'either',
+      ageRange: { min: 18, max: 24 },
+      vibeWords: ['Spontaneous', 'Social', 'Foodie'],
+      socialEnergy: 80,
+      dateBudget: 'mid',
+      dateVibe: ['Foodie', 'Surprise me'],
+      distance: 'anywhere',
+      availability: ['either'],
+      interests: ['Concerts', 'Thrifting', 'Coffee shops', 'Travel'],
+    },
+  },
+  {
+    uid: 'sample-jordan',
+    firstName: 'Jordan',
+    lastName: 'T',
+    fullName: 'Jordan T',
+    age: 22,
+    yearAtUf: 'Senior',
+    gender: 'man',
+    intention: 'either',
+    interests: ['Gym', 'Football games', 'Pickleball', 'Hiking'],
+    dateVibe: ['Active'],
+    dateBudget: 'free',
+    preferences: {
+      intention: 'either',
+      genderIdentity: 'man',
+      genderPreference: 'women',
+      intentionOpenTo: 'either',
+      ageRange: { min: 19, max: 25 },
+      vibeWords: ['Athletic', 'Spontaneous', 'Adventurous'],
+      socialEnergy: 72,
+      dateBudget: 'free',
+      dateVibe: ['Active'],
+      distance: 'near',
+      availability: ['weekdays'],
+      interests: ['Gym', 'Football games', 'Pickleball', 'Hiking'],
+    },
+  },
+  {
+    uid: 'sample-dylan',
+    firstName: 'Dylan',
+    lastName: 'Cruz',
+    fullName: 'Dylan Cruz',
+    age: 21,
+    yearAtUf: 'Junior',
+    gender: 'man',
+    intention: 'dating',
+    interests: ['Board games', 'Coffee shops', 'Trying new restaurants', 'Music', 'Gaming', 'Travel'],
+    dateVibe: ['Foodie', 'Surprise me', 'Chill'],
+    dateBudget: 'low',
+    preferences: {
+      intention: 'dating',
+      genderIdentity: 'man',
+      genderPreference: 'women',
+      intentionOpenTo: 'either',
+      ageRange: { min: 18, max: 25 },
+      vibeWords: ['Foodie', 'Night owl', 'Curious'],
+      socialEnergy: 30,
+      dateBudget: 'low',
+      dateVibe: ['Foodie', 'Surprise me', 'Chill'],
+      distance: 'anywhere',
+      availability: ['either'],
+      interests: ['Board games', 'Coffee shops', 'Trying new restaurants', 'Music', 'Gaming', 'Travel'],
+    },
+  },
+  {
+    uid: 'sample-maya',
+    firstName: 'Noah',
+    lastName: 'S',
+    fullName: 'Noah S',
+    age: 21,
+    yearAtUf: 'Junior',
+    gender: 'man',
+    intention: 'friendship',
+    interests: ['Painting', 'Film', 'Photography', 'Board games'],
+    dateVibe: ['Artsy'],
+    dateBudget: 'low',
+    preferences: {
+      intention: 'friendship',
+      genderIdentity: 'man',
+      genderPreference: 'everyone',
+      intentionOpenTo: 'friendship',
+      ageRange: { min: 20, max: 24 },
+      vibeWords: ['Artsy', 'Homebody', 'Planner'],
+      socialEnergy: 38,
+      dateBudget: 'low',
+      dateVibe: ['Artsy'],
+      distance: 'campus',
+      availability: ['weekends'],
+      interests: ['Painting', 'Film', 'Photography', 'Board games'],
+    },
+  },
+  {
+    uid: 'sample-nina',
+    firstName: 'Nina',
+    lastName: 'K',
+    fullName: 'Nina K',
+    age: 19,
+    yearAtUf: 'Freshman',
+    gender: 'woman',
+    intention: 'either',
+    interests: ['Coffee shops', 'Reading', 'Gaming', 'Trivia nights'],
+    dateVibe: ['Chill', 'Foodie'],
+    dateBudget: 'low',
+    preferences: {
+      intention: 'either',
+      genderIdentity: 'woman',
+      genderPreference: 'everyone',
+      intentionOpenTo: 'either',
+      ageRange: { min: 18, max: 22 },
+      vibeWords: ['Curious', 'Early bird', 'Chill'],
+      socialEnergy: 55,
+      dateBudget: 'low',
+      dateVibe: ['Chill', 'Foodie'],
+      distance: 'campus',
+      availability: ['either'],
+      interests: ['Coffee shops', 'Reading', 'Gaming', 'Trivia nights'],
+    },
+  },
+  {
+    uid: 'sample-sophia',
+    firstName: 'Liam',
+    lastName: 'L',
+    fullName: 'Liam L',
+    age: 23,
+    yearAtUf: 'Graduate',
+    gender: 'man',
+    intention: 'dating',
+    interests: ['Trying new restaurants', 'Travel', 'Music', 'Cooking'],
+    dateVibe: ['Foodie', 'Surprise me'],
+    dateBudget: 'mid',
+    preferences: {
+      intention: 'dating',
+      genderIdentity: 'man',
+      genderPreference: 'women',
+      intentionOpenTo: 'dating',
+      ageRange: { min: 22, max: 28 },
+      vibeWords: ['Foodie', 'Planner', 'Night owl'],
+      socialEnergy: 67,
+      dateBudget: 'mid',
+      dateVibe: ['Foodie', 'Surprise me'],
+      distance: 'anywhere',
+      availability: ['weekends'],
+      interests: ['Trying new restaurants', 'Travel', 'Music', 'Cooking'],
+    },
+  },
 ];
 
 const normalizeEmail = (email: string) => email.trim().toLowerCase();
 const isUflEmail = (email: string) => normalizeEmail(email).endsWith('@ufl.edu');
 const defaultPreferences: Preferences = {
-  intention: 'open',
+  intention: 'either',
   genderIdentity: '',
-  genderPreference: 'any',
-  ageRange: { min: 18, max: 25 },
+  genderPreference: 'everyone',
+  intentionOpenTo: 'either',
+  ageRange: { min: 18, max: 26 },
   vibeWords: [],
   socialEnergy: 50,
   dateBudget: 'low',
@@ -266,10 +453,89 @@ const defaultPreferences: Preferences = {
   availability: ['either'],
   interests: [],
 };
+const normalizeIntentionValue = (value: string | undefined) => {
+  if (!value) {
+    return 'either';
+  }
+
+  if (value === 'open' || value === 'casual' || value === 'serious') {
+    return 'dating';
+  }
+
+  if (value === 'friends') {
+    return 'friendship';
+  }
+
+  return value;
+};
+const genderPreferenceMatchMap: Record<string, string[]> = {
+  women: ['woman'],
+  men: ['man'],
+  everyone: ['woman', 'man', 'nonbinary', 'other', 'prefer-not-to-say'],
+  any: ['woman', 'man', 'nonbinary', 'other', 'prefer-not-to-say'],
+};
+const isGenderAllowed = (seekerPreference: string, candidateGender: string) => {
+  if (seekerPreference === 'any' || seekerPreference === 'everyone') {
+    return true;
+  }
+
+  const allowedGenders = genderPreferenceMatchMap[seekerPreference] || genderPreferenceMatchMap.any;
+  return allowedGenders.includes(candidateGender);
+};
+const isIntentionCompatible = (seekerIntention: string, candidateIntention: string) => {
+  if (seekerIntention === 'either' || candidateIntention === 'either') {
+    return true;
+  }
+
+  return seekerIntention === candidateIntention;
+};
+const passesDealBreakers = (viewer: UserProfile, candidate: UserProfile) => {
+  const candidateFitsViewer =
+    isGenderAllowed(viewer.genderPreference, candidate.gender) &&
+    candidate.age >= viewer.ageRange.min &&
+    candidate.age <= viewer.ageRange.max &&
+    isIntentionCompatible(viewer.intentionOpenTo, candidate.intention);
+
+  const viewerFitsCandidate =
+    isGenderAllowed(candidate.genderPreference, viewer.gender) &&
+    viewer.age >= candidate.ageRange.min &&
+    viewer.age <= candidate.ageRange.max &&
+    isIntentionCompatible(candidate.intentionOpenTo, viewer.intention);
+
+  return candidateFitsViewer && viewerFitsCandidate;
+};
+const labelForIntention = (value: string) =>
+  datingIntentionOptions.find((option) => option.value === value)?.label || 'Open to anything';
+const profileToDater = (profileEntry: UserProfile): Dater => {
+  const topVibe = profileEntry.preferences.vibeWords[0] || profileEntry.dateVibe[0] || 'Good energy';
+  const interestSummary = profileEntry.preferences.interests.slice(0, 3).join(', ');
+
+  // Future Gemini integration can reuse intention, interests, dateBudget, and dateVibe here
+  // to generate better date ideas once the planner is connected.
+  return {
+    id: profileEntry.uid,
+    name: profileEntry.fullName || profileEntry.name || 'Anonymous',
+    age: profileEntry.age,
+    yearAtUf: profileEntry.yearAtUf || 'UF Student',
+    bio:
+      [
+        labelForIntention(profileEntry.intention),
+        interestSummary,
+        profileEntry.dateBudget ? `Budget: ${profileEntry.dateBudget}` : '',
+      ]
+        .filter(Boolean)
+        .join(' · ') || 'New connection at UF',
+    compatibility: 0,
+    vibe: topVibe,
+  };
+};
 const normalizePreferences = (preferences: Partial<Preferences> | undefined): Preferences => ({
-  intention: preferences?.intention || defaultPreferences.intention,
+  intention: normalizeIntentionValue(preferences?.intention),
   genderIdentity: preferences?.genderIdentity || defaultPreferences.genderIdentity,
-  genderPreference: preferences?.genderPreference || defaultPreferences.genderPreference,
+  genderPreference: preferences?.genderPreference === 'any'
+    ? 'everyone'
+    : preferences?.genderPreference || defaultPreferences.genderPreference,
+  intentionOpenTo: normalizeIntentionValue(preferences?.intentionOpenTo),
   ageRange: {
     min: Math.max(18, Number(preferences?.ageRange?.min) || defaultPreferences.ageRange.min),
     max: Math.max(18, Number(preferences?.ageRange?.max) || defaultPreferences.ageRange.max),
@@ -304,6 +570,7 @@ const normalizeUserProfile = (rawProfile: Partial<UserProfile>, uid: string): Us
     yearAtUf: rawProfile.yearAtUf || '',
     gender: rawProfile.gender || preferences.genderIdentity,
     genderPreference: rawProfile.genderPreference || preferences.genderPreference,
+    intentionOpenTo: rawProfile.intentionOpenTo || preferences.intentionOpenTo,
     ageRange: rawProfile.ageRange || preferences.ageRange,
     intention: rawProfile.intention || preferences.intention,
     interests: Array.isArray(rawProfile.interests) ? rawProfile.interests : preferences.interests,
@@ -317,6 +584,7 @@ const normalizeUserProfile = (rawProfile: Partial<UserProfile>, uid: string): Us
     likedUsers: Array.isArray(rawProfile.likedUsers) ? rawProfile.likedUsers : [],
     passedUsers: Array.isArray(rawProfile.passedUsers) ? rawProfile.passedUsers : [],
     matches: Array.isArray(rawProfile.matches) ? rawProfile.matches : [],
+    blockedUsers: Array.isArray(rawProfile.blockedUsers) ? rawProfile.blockedUsers : [],
     onboardingCompleted: rawProfile.onboardingCompleted ?? false,
     createdAt: rawProfile.createdAt,
   };
@@ -324,32 +592,49 @@ const normalizeUserProfile = (rawProfile: Partial<UserProfile>, uid: string): Us
 const compareProfilesByPreferences = (current: UserProfile, candidate: UserProfile) => {
   let score = 0;
 
-  if (current.preferences.intention === candidate.preferences.intention) {
-    score += 20;
+  const sharedInterests = current.interests.filter((interest) =>
+    candidate.interests.includes(interest),
+  ).length;
+  score += Math.min(sharedInterests * 8, 56);
+
+  const sharedDateVibes = current.dateVibe.filter((vibe) =>
+    candidate.dateVibe.includes(vibe),
+  ).length;
+  score += Math.min(sharedDateVibes * 12, 24);
+
+  if (current.dateBudget === candidate.dateBudget) {
+    score += 12;
   }
 
-  const ageOverlap =
-    Math.min(current.preferences.ageRange.max, candidate.ageRange.max) -
-    Math.max(current.preferences.ageRange.min, candidate.ageRange.min);
-
-  if (ageOverlap >= 0) {
-    score += 15;
+  if (isIntentionCompatible(current.intention, candidate.intention)) {
+    score += 8;
   }
-
-  const socialEnergyDelta = Math.abs(current.preferences.socialEnergy - candidate.preferences.socialEnergy);
-  score += Math.max(0, 20 - Math.round(socialEnergyDelta / 5));
-
-  const sharedVibeWords = current.preferences.vibeWords.filter((word) =>
-    candidate.preferences.vibeWords.includes(word),
-  ).length;
-  score += Math.min(sharedVibeWords * 5, 15);
-
-  const sharedInterests = current.preferences.interests.filter((interest) =>
-    candidate.preferences.interests.includes(interest),
-  ).length;
-  score += Math.min(sharedInterests * 5, 30);
 
   return Math.min(score, 100);
+};
+const buildSampleDiscoveryFeed = (currentProfile?: UserProfile) => {
+  const normalizedSamples = sampleDiscoveryProfiles
+    .map((sampleProfile) => normalizeUserProfile(sampleProfile, sampleProfile.uid));
+
+  if (!currentProfile) {
+    return normalizedSamples.map((sampleProfile) => ({
+      ...profileToDater(sampleProfile),
+      compatibility: 0,
+    }));
+  }
+
+  return normalizedSamples
+    .filter((sampleProfile) => !currentProfile.likedUsers.includes(sampleProfile.uid))
+    .filter((sampleProfile) => !currentProfile.passedUsers.includes(sampleProfile.uid))
+    .map((sampleProfile) => ({
+      sampleProfile,
+      score: compareProfilesByPreferences(currentProfile, sampleProfile),
+    }))
+    .sort((left, right) => right.score - left.score)
+    .map(({ sampleProfile, score }) => ({
+      ...profileToDater(sampleProfile),
+      compatibility: score,
+    }));
 };
 const isOfflineFirestoreError = (value: unknown) =>
   value instanceof Error &&
@@ -374,6 +659,11 @@ export default function App() {
   const [swipeIndex, setSwipeIndex] = useState(0);
   const [likedDaters, setLikedDaters] = useState<Dater[]>([]);
   const [likesModalOpen, setLikesModalOpen] = useState(false);
+  const [matchesModalOpen, setMatchesModalOpen] = useState(false);
+  const [matchedDaters, setMatchedDaters] = useState<Dater[]>([]);
+  const [discoveryFeed, setDiscoveryFeed] = useState<Dater[]>(() => buildSampleDiscoveryFeed());
+  const [discoveryFeedSource, setDiscoveryFeedSource] = useState<'sample' | 'firestore'>('sample');
+  const [preferencesSection, setPreferencesSection] = useState<'preferences' | 'deal-breakers'>('preferences');
   const profilePhotoInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
@@ -428,6 +718,19 @@ export default function App() {
     });
   }, []);
 
+  useEffect(() => {
+    if (!currentUser || !profile || screen !== 'home') {
+      return;
+    }
+
+    void loadDiscoveryFeed(currentUser, profile).catch(() => {
+      setDiscoveryFeed(buildSampleDiscoveryFeed(profile));
+      setDiscoveryFeedSource('sample');
+      setSwipeIndex(0);
+      setStatus('Using sample daters while the discovery feed loads.');
+    });
+  }, [currentUser, profile, screen]);
+
   const resetMessages = () => {
     setError('');
     setStatus('');
@@ -465,6 +768,7 @@ export default function App() {
       intention: profileForm.intention,
       genderIdentity: profileForm.genderIdentity,
       genderPreference: profileForm.genderPreference,
+      intentionOpenTo: profileForm.intentionOpenTo,
       ageRange: {
         min: Number(profileForm.ageRangeMin),
         max: Number(profileForm.ageRangeMax),
@@ -497,6 +801,7 @@ export default function App() {
       yearAtUf: profile?.yearAtUf || profileForm.yearAtUf || '',
       gender: profile?.gender || nextPreferences.genderIdentity,
       genderPreference: profile?.genderPreference || nextPreferences.genderPreference,
+      intentionOpenTo: profile?.intentionOpenTo || nextPreferences.intentionOpenTo,
       ageRange: profile?.ageRange || nextPreferences.ageRange,
       intention: profile?.intention || nextPreferences.intention,
       interests: profile?.interests || nextPreferences.interests,
@@ -510,6 +815,7 @@ export default function App() {
       likedUsers: profile?.likedUsers || [],
       passedUsers: profile?.passedUsers || [],
       matches: profile?.matches || [],
+      blockedUsers: profile?.blockedUsers || [],
       onboardingCompleted: profile?.onboardingCompleted ?? true,
       createdAt: profile?.createdAt,
     };
@@ -828,6 +1134,7 @@ export default function App() {
         intention: profileForm.intention,
         genderIdentity: profileForm.genderIdentity,
         genderPreference: profileForm.genderPreference,
+        intentionOpenTo: profileForm.intentionOpenTo,
         ageRange: {
           min: Number(profileForm.ageRangeMin),
           max: Number(profileForm.ageRangeMax),
@@ -852,6 +1159,7 @@ export default function App() {
         yearAtUf: profileForm.yearAtUf,
         gender: nextPreferences.genderIdentity,
         genderPreference: nextPreferences.genderPreference,
+        intentionOpenTo: nextPreferences.intentionOpenTo,
         ageRange: nextPreferences.ageRange,
         intention: nextPreferences.intention,
         interests: nextPreferences.interests,
@@ -865,6 +1173,7 @@ export default function App() {
         likedUsers: profile?.likedUsers || [],
         passedUsers: profile?.passedUsers || [],
         matches: profile?.matches || [],
+        blockedUsers: profile?.blockedUsers || [],
         onboardingCompleted: true,
         createdAt: profile?.createdAt || serverTimestamp(),
       };
@@ -886,6 +1195,7 @@ export default function App() {
           intention: profileForm.intention,
           genderIdentity: profileForm.genderIdentity,
           genderPreference: profileForm.genderPreference,
+          intentionOpenTo: profileForm.intentionOpenTo,
           ageRange: {
             min: Number(profileForm.ageRangeMin),
             max: Number(profileForm.ageRangeMax),
@@ -909,6 +1219,7 @@ export default function App() {
           yearAtUf: profileForm.yearAtUf,
           gender: nextPreferences.genderIdentity,
           genderPreference: nextPreferences.genderPreference,
+          intentionOpenTo: nextPreferences.intentionOpenTo,
           ageRange: nextPreferences.ageRange,
           intention: nextPreferences.intention,
           interests: nextPreferences.interests,
@@ -922,6 +1233,7 @@ export default function App() {
           likedUsers: profile?.likedUsers || [],
           passedUsers: profile?.passedUsers || [],
           matches: profile?.matches || [],
+          blockedUsers: profile?.blockedUsers || [],
           onboardingCompleted: true,
           createdAt: profile?.createdAt,
         };
@@ -967,6 +1279,7 @@ export default function App() {
       intention: profile?.preferences.intention || current.intention,
       genderIdentity: profile?.preferences.genderIdentity || current.genderIdentity,
       genderPreference: profile?.preferences.genderPreference || current.genderPreference,
+      intentionOpenTo: profile?.preferences.intentionOpenTo || current.intentionOpenTo,
       ageRangeMin: String(profile?.preferences.ageRange.min || current.ageRangeMin),
       ageRangeMax: String(profile?.preferences.ageRange.max || current.ageRangeMax),
       vibeWords: profile?.preferences.vibeWords || current.vibeWords,
@@ -1016,6 +1329,7 @@ export default function App() {
       intention: profileForm.intention,
       genderIdentity: profileForm.genderIdentity,
       genderPreference: profileForm.genderPreference,
+      intentionOpenTo: profileForm.intentionOpenTo,
       ageRange: {
         min: minAge,
         max: maxAge,
@@ -1044,6 +1358,7 @@ export default function App() {
       yearAtUf: profile?.yearAtUf || profileForm.yearAtUf || '',
       gender: nextPreferences.genderIdentity,
       genderPreference: nextPreferences.genderPreference,
+      intentionOpenTo: nextPreferences.intentionOpenTo,
       ageRange: nextPreferences.ageRange,
       intention: nextPreferences.intention,
       interests: nextPreferences.interests,
@@ -1057,6 +1372,7 @@ export default function App() {
       likedUsers: profile?.likedUsers || [],
       passedUsers: profile?.passedUsers || [],
       matches: profile?.matches || [],
+      blockedUsers: profile?.blockedUsers || [],
       onboardingCompleted: profile?.onboardingCompleted ?? true,
       createdAt: profile?.createdAt,
     };
@@ -1072,6 +1388,7 @@ export default function App() {
             preferences: nextPreferences,
             gender: updatedProfile.gender,
             genderPreference: updatedProfile.genderPreference,
+            intentionOpenTo: updatedProfile.intentionOpenTo,
             ageRange: updatedProfile.ageRange,
             intention: updatedProfile.intention,
             interests: updatedProfile.interests,
@@ -1136,6 +1453,80 @@ export default function App() {
       .sort((left, right) => right.score - left.score);
   };
 
+  const loadDiscoveryFeed = async (currentUserEntry: User, currentProfile: UserProfile) => {
+    if (!db) {
+      setDiscoveryFeed(buildSampleDiscoveryFeed(currentProfile));
+      setDiscoveryFeedSource('sample');
+      setSwipeIndex(0);
+      return;
+    }
+
+    const discoveryQuery = query(
+      collection(db, 'users'),
+      where('onboardingCompleted', '==', true),
+      limit(100),
+    );
+
+    const snapshot = await getDocs(discoveryQuery);
+    const currentLikedUsers = new Set(currentProfile.likedUsers);
+    const currentPassedUsers = new Set(currentProfile.passedUsers);
+    const currentBlockedUsers = new Set(currentProfile.blockedUsers || []);
+
+    // Stage 1: hard filters (both sides must pass each other's deal-breakers).
+    const remoteCandidates = snapshot.docs
+      .map((profileDoc) => normalizeUserProfile(profileDoc.data() as Partial<UserProfile>, profileDoc.id))
+      .filter((candidateProfile) => candidateProfile.uid !== currentUserEntry.uid)
+      .filter((candidateProfile) => !currentLikedUsers.has(candidateProfile.uid))
+      .filter((candidateProfile) => !currentPassedUsers.has(candidateProfile.uid))
+      .filter((candidateProfile) => !candidateProfile.blockedUsers.includes(currentUserEntry.uid))
+      .filter((candidateProfile) => !currentBlockedUsers.has(candidateProfile.uid))
+      .filter((candidateProfile) => passesDealBreakers(currentProfile, candidateProfile))
+      // Stage 2: soft scoring to rank, not hide, compatible candidates.
+      .map((candidateProfile) => ({
+        candidateProfile,
+        score: compareProfilesByPreferences(currentProfile, candidateProfile),
+      }))
+      .sort((left, right) => right.score - left.score)
+      .map(({ candidateProfile, score }) => ({
+        ...profileToDater(candidateProfile),
+        compatibility: score,
+      }));
+
+    if (remoteCandidates.length) {
+      setDiscoveryFeed(remoteCandidates);
+      setDiscoveryFeedSource('firestore');
+      setSwipeIndex(0);
+      return;
+    }
+
+    setDiscoveryFeed(buildSampleDiscoveryFeed(currentProfile));
+    setDiscoveryFeedSource('sample');
+    setSwipeIndex(0);
+  };
+
+  const loadMatchedDaters = async () => {
+    if (!db || !profile?.matches.length) {
+      setMatchedDaters([]);
+      return;
+    }
+
+    const firestore = db;
+
+    const matchDocs = await Promise.all(
+      profile.matches.map(async (matchId) => {
+        const matchDoc = await getDoc(doc(firestore, 'users', matchId));
+
+        if (!matchDoc.exists()) {
+          return null;
+        }
+
+        return profileToDater(normalizeUserProfile(matchDoc.data() as Partial<UserProfile>, matchId));
+      }),
+    );
+
+    setMatchedDaters(matchDocs.filter((match): match is Dater => Boolean(match)));
+  };
+
   const handleSignOut = async () => {
     if (!auth) {
       return;
@@ -1145,6 +1536,8 @@ export default function App() {
     setProfile(null);
     setScreen('intro');
     setStatus('Signed out.');
+    setMatchesModalOpen(false);
+    setMatchedDaters([]);
   };
 
   const renderFrame = (content: ReactNode) => (
@@ -1308,6 +1701,7 @@ export default function App() {
               <p>{profile?.age ? `${profile.age} years old` : 'Add more details to make matching better.'}</p>
               <p>Intent: {profile?.intention || 'Open'}</p>
               <p>Show me: {profile?.genderPreference || 'Any'}</p>
+              <p>Open to: {profile?.intentionOpenTo || 'Open to anything'}</p>
               <p>
                 Age range: {profile?.ageRange?.min || 18}-{profile?.ageRange?.max || 25}
               </p>
@@ -1335,6 +1729,16 @@ export default function App() {
                 type="button"
               >
                 View Likes ({likedDaters.length})
+              </button>
+              <button
+                className="primary-button tile-button"
+                onClick={async () => {
+                  setMatchesModalOpen(true);
+                  await loadMatchedDaters();
+                }}
+                type="button"
+              >
+                View Matches ({profile?.matches.length || 0})
               </button>
               <button className="secondary-button tile-button" onClick={handleSignOut} type="button">
                 Sign Out
@@ -1389,9 +1793,9 @@ export default function App() {
       : firestoreHealth === 'fallback'
         ? 'Local fallback'
         : 'Firestore unknown';
-  const currentDater = sampleDaters[swipeIndex] || null;
+  const currentDater = discoveryFeed[swipeIndex] || null;
 
-  const handleLike = () => {
+  const handleLike = async () => {
     if (!currentDater) {
       return;
     }
@@ -1401,19 +1805,58 @@ export default function App() {
       : [...(profile?.likedUsers || []), currentDater.id];
 
     if (currentUser && profile) {
-      const nextProfile = {
-        ...profile,
-        likedUsers: nextLikedUserIds,
-      };
+      const currentUserRef = db ? doc(db, 'users', currentUser.uid) : null;
+      const nextProfile = { ...profile, likedUsers: nextLikedUserIds };
       setProfile(nextProfile);
       saveLocalProfile(currentUser.uid, nextProfile);
 
-      if (db) {
-        void setDoc(
-          doc(db, 'users', currentUser.uid),
-          { likedUsers: nextLikedUserIds },
-          { merge: true },
-        );
+      if (db && discoveryFeedSource === 'firestore') {
+        try {
+          const likedUserRef = doc(db, 'users', currentDater.id);
+          const likedUserSnap = await getDoc(likedUserRef);
+          const likedUserProfile = likedUserSnap.exists()
+            ? normalizeUserProfile(likedUserSnap.data() as Partial<UserProfile>, currentDater.id)
+            : null;
+          const matchedBack = !!likedUserProfile?.likedUsers.includes(currentUser.uid);
+
+          const nextMatches = matchedBack
+            ? Array.from(new Set([...(profile.matches || []), currentDater.id]))
+            : profile.matches || [];
+          const nextLikedUserMatches = matchedBack && likedUserProfile
+            ? Array.from(new Set([...(likedUserProfile.matches || []), currentUser.uid]))
+            : likedUserProfile?.matches || [];
+
+          if (currentUserRef) {
+            await setDoc(
+              currentUserRef,
+              { likedUsers: nextLikedUserIds, matches: nextMatches },
+              { merge: true },
+            );
+          }
+
+          if (matchedBack) {
+            await setDoc(
+              likedUserRef,
+              { matches: nextLikedUserMatches },
+              { merge: true },
+            );
+
+            const matchedProfile = { ...nextProfile, matches: nextMatches };
+            setProfile(matchedProfile);
+            saveLocalProfile(currentUser.uid, matchedProfile);
+            // Future Gemini integration: use both users' shared interests/dateVibe
+            // to generate a date plan once matching chat/planner is connected.
+            setStatus('It\'s a match!');
+          }
+        } catch {
+          if (currentUserRef) {
+            await setDoc(currentUserRef, { likedUsers: nextLikedUserIds }, { merge: true });
+          }
+        }
+      } else if (db) {
+        if (currentUserRef) {
+          await setDoc(currentUserRef, { likedUsers: nextLikedUserIds }, { merge: true });
+        }
       }
     }
 
@@ -1425,7 +1868,7 @@ export default function App() {
     setSwipeIndex((current) => current + 1);
   };
 
-  const handlePass = () => {
+  const handlePass = async () => {
     if (!currentDater) {
       return;
     }
@@ -1443,8 +1886,9 @@ export default function App() {
       saveLocalProfile(currentUser.uid, nextProfile);
 
       if (db) {
-        void setDoc(
-          doc(db, 'users', currentUser.uid),
+        const currentUserRef = doc(db, 'users', currentUser.uid);
+        await setDoc(
+          currentUserRef,
           { passedUsers: nextPassedUserIds },
           { merge: true },
         );
@@ -1699,222 +2143,263 @@ export default function App() {
           <h1 className="script-title">Preferences</h1>
           <h3>Choose your matching preferences.</h3>
         </div>
+        <div className="inline-links" style={{ width: '100%' }}>
+          <button
+            className="secondary-button"
+            type="button"
+            onClick={() => setPreferencesSection('preferences')}
+            style={{ opacity: preferencesSection === 'preferences' ? 1 : 0.6 }}
+          >
+            Your Preferences
+          </button>
+          <button
+            className="secondary-button"
+            type="button"
+            onClick={() => setPreferencesSection('deal-breakers')}
+            style={{ opacity: preferencesSection === 'deal-breakers' ? 1 : 0.6 }}
+          >
+            Dislikes / Deal Breakers
+          </button>
+        </div>
         <form className="auth-form" onSubmit={handlePreferencesSave}>
-          <label>
-            Dating Intention
-            <select
-              className="preferences-select"
-              value={profileForm.intention}
-              onChange={(event) =>
-                setProfileForm((current) => ({ ...current, intention: event.target.value }))
-              }
-            >
-              {datingIntentionOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Gender Identity
-            <select
-              className="preferences-select"
-              value={profileForm.genderIdentity}
-              onChange={(event) =>
-                setProfileForm((current) => ({ ...current, genderIdentity: event.target.value }))
-              }
-            >
-              <option value="">Select gender identity</option>
-              {genderIdentityOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Show Me
-            <select
-              className="preferences-select"
-              value={profileForm.genderPreference}
-              onChange={(event) =>
-                setProfileForm((current) => ({ ...current, genderPreference: event.target.value }))
-              }
-            >
-              {genderPreferenceOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Minimum Age
-            <select
-              className="preferences-select"
-              value={profileForm.ageRangeMin}
-              onChange={(event) =>
-                setProfileForm((current) => ({ ...current, ageRangeMin: event.target.value }))
-              }
-            >
-              {Array.from({ length: 23 }, (_, index) => 18 + index).map((ageOption) => (
-                <option key={ageOption} value={String(ageOption)}>
-                  {ageOption}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Maximum Age
-            <select
-              className="preferences-select"
-              value={profileForm.ageRangeMax}
-              onChange={(event) =>
-                setProfileForm((current) => ({ ...current, ageRangeMax: event.target.value }))
-              }
-            >
-              {Array.from({ length: 23 }, (_, index) => 18 + index).map((ageOption) => (
-                <option key={ageOption} value={String(ageOption)}>
-                  {ageOption}
-                </option>
-              ))}
-            </select>
-          </label>
-          <div>
-            <label>Pick up to 3 vibe words</label>
-            <div className="hobbies-scroll-list">
-              {vibeWordOptions.map((word) => (
-                <label key={word} className="hobby-option-row">
-                  <input
-                    type="checkbox"
-                    checked={profileForm.vibeWords.includes(word)}
-                    onChange={() =>
-                      setProfileForm((current) => ({
-                        ...current,
-                        vibeWords: current.vibeWords.includes(word)
-                          ? current.vibeWords.filter((currentWord) => currentWord !== word)
-                          : current.vibeWords.length >= 3
-                            ? current.vibeWords
-                            : [...current.vibeWords, word],
-                      }))
-                    }
-                  />
-                  <span className="hobby-option-text">{word}</span>
-                </label>
-              ))}
-            </div>
-          </div>
-          <label>
-            Social Energy: {profileForm.socialEnergy}
-            <input
-              type="range"
-              min="0"
-              max="100"
-              step="5"
-              value={profileForm.socialEnergy}
-              onChange={(event) =>
-                setProfileForm((current) => ({
-                  ...current,
-                  socialEnergy: Number(event.target.value),
-                }))
-              }
-            />
-          </label>
-          <label>
-            Budget
-            <select
-              className="preferences-select"
-              value={profileForm.dateBudget}
-              onChange={(event) =>
-                setProfileForm((current) => ({ ...current, dateBudget: event.target.value }))
-              }
-            >
-              {dateBudgetOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <div>
-            <label>Date vibe (pick one or more)</label>
-            <div className="hobbies-scroll-list">
-              {dateVibeOptions.map((vibe) => (
-                <label key={vibe} className="hobby-option-row">
-                  <input
-                    type="checkbox"
-                    checked={profileForm.dateVibe.includes(vibe)}
-                    onChange={() =>
-                      setProfileForm((current) => ({
-                        ...current,
-                        dateVibe: current.dateVibe.includes(vibe)
-                          ? current.dateVibe.filter((currentVibe) => currentVibe !== vibe)
-                          : [...current.dateVibe, vibe],
-                      }))
-                    }
-                  />
-                  <span className="hobby-option-text">{vibe}</span>
-                </label>
-              ))}
-            </div>
-          </div>
-          <label>
-            Distance
-            <select
-              className="preferences-select"
-              value={profileForm.distance}
-              onChange={(event) =>
-                setProfileForm((current) => ({ ...current, distance: event.target.value }))
-              }
-            >
-              {distanceOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Availability
-            <select
-              className="preferences-select"
-              value={profileForm.availability[0] || 'either'}
-              onChange={(event) =>
-                setProfileForm((current) => ({ ...current, availability: [event.target.value] }))
-              }
-            >
-              {availabilityOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <div>
-            <label>Interests (pick up to 10)</label>
-            <div className="hobbies-scroll-list">
-              {interestOptions.map((interest) => (
-                <label key={interest} className="hobby-option-row">
-                  <input
-                    type="checkbox"
-                    checked={profileForm.interests.includes(interest)}
-                    onChange={() =>
-                      setProfileForm((current) => ({
-                        ...current,
-                        interests: current.interests.includes(interest)
-                          ? current.interests.filter((currentInterest) => currentInterest !== interest)
-                          : current.interests.length >= 10
-                            ? current.interests
-                            : [...current.interests, interest],
-                      }))
-                    }
-                  />
-                  <span className="hobby-option-text">{interest}</span>
-                </label>
-              ))}
-            </div>
-          </div>
+          {preferencesSection === 'preferences' ? (
+            <>
+              <label>
+                Dating Intention
+                <select
+                  className="preferences-select"
+                  value={profileForm.intention}
+                  onChange={(event) =>
+                    setProfileForm((current) => ({ ...current, intention: event.target.value }))
+                  }
+                >
+                  {datingIntentionOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Gender Identity
+                <select
+                  className="preferences-select"
+                  value={profileForm.genderIdentity}
+                  onChange={(event) =>
+                    setProfileForm((current) => ({ ...current, genderIdentity: event.target.value }))
+                  }
+                >
+                  <option value="">Select gender identity</option>
+                  {genderIdentityOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div>
+                <label>Pick up to 3 vibe words</label>
+                <div className="hobbies-scroll-list">
+                  {vibeWordOptions.map((word) => (
+                    <label key={word} className="hobby-option-row">
+                      <input
+                        type="checkbox"
+                        checked={profileForm.vibeWords.includes(word)}
+                        onChange={() =>
+                          setProfileForm((current) => ({
+                            ...current,
+                            vibeWords: current.vibeWords.includes(word)
+                              ? current.vibeWords.filter((currentWord) => currentWord !== word)
+                              : current.vibeWords.length >= 3
+                                ? current.vibeWords
+                                : [...current.vibeWords, word],
+                          }))
+                        }
+                      />
+                      <span className="hobby-option-text">{word}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+              <label>
+                Social Energy: {profileForm.socialEnergy}
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  step="5"
+                  value={profileForm.socialEnergy}
+                  onChange={(event) =>
+                    setProfileForm((current) => ({
+                      ...current,
+                      socialEnergy: Number(event.target.value),
+                    }))
+                  }
+                />
+              </label>
+              <label>
+                Budget
+                <select
+                  className="preferences-select"
+                  value={profileForm.dateBudget}
+                  onChange={(event) =>
+                    setProfileForm((current) => ({ ...current, dateBudget: event.target.value }))
+                  }
+                >
+                  {dateBudgetOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div>
+                <label>Date vibe (pick one or more)</label>
+                <div className="hobbies-scroll-list">
+                  {dateVibeOptions.map((vibe) => (
+                    <label key={vibe} className="hobby-option-row">
+                      <input
+                        type="checkbox"
+                        checked={profileForm.dateVibe.includes(vibe)}
+                        onChange={() =>
+                          setProfileForm((current) => ({
+                            ...current,
+                            dateVibe: current.dateVibe.includes(vibe)
+                              ? current.dateVibe.filter((currentVibe) => currentVibe !== vibe)
+                              : [...current.dateVibe, vibe],
+                          }))
+                        }
+                      />
+                      <span className="hobby-option-text">{vibe}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+              <label>
+                Distance
+                <select
+                  className="preferences-select"
+                  value={profileForm.distance}
+                  onChange={(event) =>
+                    setProfileForm((current) => ({ ...current, distance: event.target.value }))
+                  }
+                >
+                  {distanceOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Availability
+                <select
+                  className="preferences-select"
+                  value={profileForm.availability[0] || 'either'}
+                  onChange={(event) =>
+                    setProfileForm((current) => ({ ...current, availability: [event.target.value] }))
+                  }
+                >
+                  {availabilityOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div>
+                <label>Interests (pick up to 10)</label>
+                <div className="hobbies-scroll-list">
+                  {interestOptions.map((interest) => (
+                    <label key={interest} className="hobby-option-row">
+                      <input
+                        type="checkbox"
+                        checked={profileForm.interests.includes(interest)}
+                        onChange={() =>
+                          setProfileForm((current) => ({
+                            ...current,
+                            interests: current.interests.includes(interest)
+                              ? current.interests.filter((currentInterest) => currentInterest !== interest)
+                              : current.interests.length >= 10
+                                ? current.interests
+                                : [...current.interests, interest],
+                          }))
+                        }
+                      />
+                      <span className="hobby-option-text">{interest}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            </>
+          ) : (
+            <>
+              <label>
+                I Want to Meet
+                <select
+                  className="preferences-select"
+                  value={profileForm.genderPreference}
+                  onChange={(event) =>
+                    setProfileForm((current) => ({ ...current, genderPreference: event.target.value }))
+                  }
+                >
+                  {genderPreferenceOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                I'm Looking For
+                <select
+                  className="preferences-select"
+                  value={profileForm.intentionOpenTo}
+                  onChange={(event) =>
+                    setProfileForm((current) => ({ ...current, intentionOpenTo: event.target.value }))
+                  }
+                >
+                  {datingIntentionOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Age Range I'm Open To: Minimum
+                <select
+                  className="preferences-select"
+                  value={profileForm.ageRangeMin}
+                  onChange={(event) =>
+                    setProfileForm((current) => ({ ...current, ageRangeMin: event.target.value }))
+                  }
+                >
+                  {Array.from({ length: 23 }, (_, index) => 18 + index).map((ageOption) => (
+                    <option key={ageOption} value={String(ageOption)}>
+                      {ageOption}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Age Range I'm Open To: Maximum
+                <select
+                  className="preferences-select"
+                  value={profileForm.ageRangeMax}
+                  onChange={(event) =>
+                    setProfileForm((current) => ({ ...current, ageRangeMax: event.target.value }))
+                  }
+                >
+                  {Array.from({ length: 23 }, (_, index) => 18 + index).map((ageOption) => (
+                    <option key={ageOption} value={String(ageOption)}>
+                      {ageOption}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </>
+          )}
           <button className="primary-button" type="submit" disabled={loading}>
             {loading ? 'Saving...' : 'Save Preferences'}
           </button>
@@ -1982,6 +2467,39 @@ export default function App() {
               </div>
             ) : (
               <p className="account-detail">No likes yet. Use the Swipe tab to save a few people here.</p>
+            )}
+          </div>
+        </div>
+      ) : null}
+      {matchesModalOpen ? (
+        <div className="likes-modal">
+          <div className="likes-modal-card">
+            <div className="likes-modal-header">
+              <div>
+                <p className="account-label">Matches</p>
+                <h2>Mutual connections</h2>
+              </div>
+              <button className="link-button" type="button" onClick={() => setMatchesModalOpen(false)}>
+                Close
+              </button>
+            </div>
+            {matchedDaters.length ? (
+              <div className="likes-list">
+                {matchedDaters.map((dater) => (
+                  <article key={dater.id} className="liked-card">
+                    <div>
+                      <p className="account-label">{dater.compatibility}% match</p>
+                      <h3>
+                        {dater.name}, {dater.age}
+                      </h3>
+                      <p>{dater.yearAtUf}</p>
+                      <p>{dater.bio}</p>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <p className="account-detail">No matches yet. Mutual likes will show up here.</p>
             )}
           </div>
         </div>
