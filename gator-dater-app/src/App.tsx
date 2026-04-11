@@ -9,7 +9,17 @@ import {
   updateProfile,
   User,
 } from 'firebase/auth';
-import { doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore';
+import {
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  limit,
+  query,
+  serverTimestamp,
+  setDoc,
+  where,
+} from 'firebase/firestore';
 import { auth, db, isFirebaseConfigured } from './firebase';
 import gatorImage from '../assets/PLEASE REPLACE.png';
 import heartIcon from '../assets/heartIcon.png';
@@ -28,6 +38,7 @@ type Screen =
   | 'signup-verification'
   | 'signin'
   | 'profile'
+  | 'preferences'
   | 'all-set'
   | 'home';
 
@@ -59,16 +70,63 @@ type ProfileState = {
   age: string;
   yearAtUf: string;
   photoUrl: string;
+  intention: string;
+  genderIdentity: string;
+  genderPreference: string;
+  ageRangeMin: string;
+  ageRangeMax: string;
+  vibeWords: string[];
+  socialEnergy: number;
+  dateBudget: string;
+  dateVibe: string[];
+  distance: string;
+  availability: string[];
+  interests: string[];
+};
+
+type Preferences = {
+  intention: string;
+  genderIdentity: string;
+  genderPreference: string;
+  ageRange: {
+    min: number;
+    max: number;
+  };
+  vibeWords: string[];
+  socialEnergy: number;
+  dateBudget: string;
+  dateVibe: string[];
+  distance: string;
+  availability: string[];
+  interests: string[];
 };
 
 type UserProfile = {
+  uid: string;
   firstName: string;
   lastName: string;
   fullName: string;
+  name: string;
   age: number;
   yearAtUf: string;
+  gender: string;
+  genderPreference: string;
+  ageRange: {
+    min: number;
+    max: number;
+  };
+  intention: string;
+  interests: string[];
+  dateBudget: string;
+  dateVibe: string[];
+  distance: string;
+  availability: string[];
   email: string;
   photoUrl: string;
+  preferences: Preferences;
+  likedUsers: string[];
+  passedUsers: string[];
+  matches: string[];
   onboardingCompleted: boolean;
   createdAt?: unknown;
 };
@@ -89,9 +147,101 @@ const initialProfile: ProfileState = {
   age: '',
   yearAtUf: '',
   photoUrl: '',
+  intention: 'open',
+  genderIdentity: '',
+  genderPreference: 'any',
+  ageRangeMin: '18',
+  ageRangeMax: '25',
+  vibeWords: [],
+  socialEnergy: 50,
+  dateBudget: 'low',
+  dateVibe: [],
+  distance: 'near',
+  availability: ['either'],
+  interests: [],
 };
 
 const yearOptions = ['Freshman', 'Sophomore', 'Junior', 'Senior', 'Graduate'];
+const datingIntentionOptions = [
+  { value: 'friends', label: 'Friendship' },
+  { value: 'casual', label: 'Casual dating' },
+  { value: 'serious', label: 'Serious relationship' },
+  { value: 'open', label: 'Open to anything' },
+];
+const genderIdentityOptions = [
+  { value: 'woman', label: 'Woman' },
+  { value: 'man', label: 'Man' },
+  { value: 'nonbinary', label: 'Non-binary' },
+  { value: 'other', label: 'Other' },
+  { value: 'prefer-not-to-say', label: 'Prefer not to say' },
+];
+const genderPreferenceOptions = [
+  { value: 'women', label: 'Women' },
+  { value: 'men', label: 'Men' },
+  { value: 'everyone', label: 'Everyone' },
+  { value: 'any', label: 'Any' },
+];
+const vibeWordOptions = [
+  'Adventurous',
+  'Homebody',
+  'Foodie',
+  'Artsy',
+  'Athletic',
+  'Night owl',
+  'Early bird',
+  'Spontaneous',
+  'Planner',
+  'Chill',
+  'Social',
+  'Curious',
+];
+const dateBudgetOptions = [
+  { value: 'free', label: 'Free' },
+  { value: 'low', label: '$$' },
+  { value: 'mid', label: '$$$' },
+];
+const dateVibeOptions = [
+  'Chill & lowkey',
+  'Active & outdoorsy',
+  'Cultural & artsy',
+  'Foodie',
+  'Surprise me',
+];
+const distanceOptions = [
+  { value: 'campus', label: 'On campus' },
+  { value: 'near', label: 'Near campus (< 2 mi)' },
+  { value: 'anywhere', label: 'Anywhere in Gainesville' },
+];
+const availabilityOptions = [
+  { value: 'weekdays', label: 'Weekdays' },
+  { value: 'weekends', label: 'Weekends' },
+  { value: 'either', label: 'Either' },
+];
+const interestOptions = [
+  'Gym',
+  'Football games',
+  'Pickleball',
+  'Hiking',
+  'Running',
+  'Board games',
+  'Concerts',
+  'Trivia nights',
+  'Thrifting',
+  'Cooking',
+  'Coffee shops',
+  'Trying new restaurants',
+  'Music',
+  'Photography',
+  'Painting',
+  'Film',
+  'Reading',
+  'Gaming',
+  'Coding',
+  'Greek life',
+  'Club sports',
+  'Travel',
+  'Volunteering',
+];
 const sampleDaters: Dater[] = [
   { id: 'leah', name: 'Leah', age: 21, yearAtUf: 'Junior', bio: 'Loves bookstores, matcha, and spontaneous Gainesville adventures.', compatibility: 92, vibe: 'Low-key creative' },
   { id: 'ava', name: 'Ava', age: 20, yearAtUf: 'Sophomore', bio: 'Big on live music, sunset walks, and trying every coffee shop once.', compatibility: 88, vibe: 'Outgoing planner' },
@@ -103,6 +253,104 @@ const sampleDaters: Dater[] = [
 
 const normalizeEmail = (email: string) => email.trim().toLowerCase();
 const isUflEmail = (email: string) => normalizeEmail(email).endsWith('@ufl.edu');
+const defaultPreferences: Preferences = {
+  intention: 'open',
+  genderIdentity: '',
+  genderPreference: 'any',
+  ageRange: { min: 18, max: 25 },
+  vibeWords: [],
+  socialEnergy: 50,
+  dateBudget: 'low',
+  dateVibe: [],
+  distance: 'near',
+  availability: ['either'],
+  interests: [],
+};
+const normalizePreferences = (preferences: Partial<Preferences> | undefined): Preferences => ({
+  intention: preferences?.intention || defaultPreferences.intention,
+  genderIdentity: preferences?.genderIdentity || defaultPreferences.genderIdentity,
+  genderPreference: preferences?.genderPreference || defaultPreferences.genderPreference,
+  ageRange: {
+    min: Math.max(18, Number(preferences?.ageRange?.min) || defaultPreferences.ageRange.min),
+    max: Math.max(18, Number(preferences?.ageRange?.max) || defaultPreferences.ageRange.max),
+  },
+  vibeWords: Array.isArray(preferences?.vibeWords)
+    ? preferences.vibeWords.filter((word): word is string => typeof word === 'string').slice(0, 3)
+    : [],
+  socialEnergy: Math.min(100, Math.max(0, Number(preferences?.socialEnergy) || defaultPreferences.socialEnergy)),
+  dateBudget: preferences?.dateBudget || defaultPreferences.dateBudget,
+  dateVibe: Array.isArray(preferences?.dateVibe)
+    ? preferences.dateVibe.filter((vibe): vibe is string => typeof vibe === 'string')
+    : [],
+  distance: preferences?.distance || defaultPreferences.distance,
+  availability: Array.isArray(preferences?.availability)
+    ? preferences.availability.filter((option): option is string => typeof option === 'string')
+    : ['either'],
+  interests: Array.isArray(preferences?.interests)
+    ? preferences.interests.filter((interest): interest is string => typeof interest === 'string').slice(0, 10)
+    : [],
+});
+const normalizeUserProfile = (rawProfile: Partial<UserProfile>, uid: string): UserProfile => {
+  const preferences = normalizePreferences(rawProfile.preferences);
+  const fullName = rawProfile.fullName || rawProfile.name || `${rawProfile.firstName || ''} ${rawProfile.lastName || ''}`.trim();
+
+  return {
+    uid: rawProfile.uid || uid,
+    firstName: rawProfile.firstName || '',
+    lastName: rawProfile.lastName || '',
+    fullName,
+    name: rawProfile.name || fullName,
+    age: Number(rawProfile.age) || 18,
+    yearAtUf: rawProfile.yearAtUf || '',
+    gender: rawProfile.gender || preferences.genderIdentity,
+    genderPreference: rawProfile.genderPreference || preferences.genderPreference,
+    ageRange: rawProfile.ageRange || preferences.ageRange,
+    intention: rawProfile.intention || preferences.intention,
+    interests: Array.isArray(rawProfile.interests) ? rawProfile.interests : preferences.interests,
+    dateBudget: rawProfile.dateBudget || preferences.dateBudget,
+    dateVibe: Array.isArray(rawProfile.dateVibe) ? rawProfile.dateVibe : preferences.dateVibe,
+    distance: rawProfile.distance || preferences.distance,
+    availability: Array.isArray(rawProfile.availability) ? rawProfile.availability : preferences.availability,
+    email: rawProfile.email || '',
+    photoUrl: rawProfile.photoUrl || '',
+    preferences,
+    likedUsers: Array.isArray(rawProfile.likedUsers) ? rawProfile.likedUsers : [],
+    passedUsers: Array.isArray(rawProfile.passedUsers) ? rawProfile.passedUsers : [],
+    matches: Array.isArray(rawProfile.matches) ? rawProfile.matches : [],
+    onboardingCompleted: rawProfile.onboardingCompleted ?? false,
+    createdAt: rawProfile.createdAt,
+  };
+};
+const compareProfilesByPreferences = (current: UserProfile, candidate: UserProfile) => {
+  let score = 0;
+
+  if (current.preferences.intention === candidate.preferences.intention) {
+    score += 20;
+  }
+
+  const ageOverlap =
+    Math.min(current.preferences.ageRange.max, candidate.ageRange.max) -
+    Math.max(current.preferences.ageRange.min, candidate.ageRange.min);
+
+  if (ageOverlap >= 0) {
+    score += 15;
+  }
+
+  const socialEnergyDelta = Math.abs(current.preferences.socialEnergy - candidate.preferences.socialEnergy);
+  score += Math.max(0, 20 - Math.round(socialEnergyDelta / 5));
+
+  const sharedVibeWords = current.preferences.vibeWords.filter((word) =>
+    candidate.preferences.vibeWords.includes(word),
+  ).length;
+  score += Math.min(sharedVibeWords * 5, 15);
+
+  const sharedInterests = current.preferences.interests.filter((interest) =>
+    candidate.preferences.interests.includes(interest),
+  ).length;
+  score += Math.min(sharedInterests * 5, 30);
+
+  return Math.min(score, 100);
+};
 const isOfflineFirestoreError = (value: unknown) =>
   value instanceof Error &&
   (value.message.toLowerCase().includes('client is offline') ||
@@ -193,7 +441,9 @@ export default function App() {
     }
 
     try {
-      return JSON.parse(storedProfile) as UserProfile;
+      const parsedProfile = JSON.parse(storedProfile) as Partial<UserProfile>;
+
+      return normalizeUserProfile(parsedProfile, uid);
     } catch {
       return null;
     }
@@ -211,7 +461,25 @@ export default function App() {
       return;
     }
 
+    const nextPreferences = normalizePreferences(profile?.preferences || {
+      intention: profileForm.intention,
+      genderIdentity: profileForm.genderIdentity,
+      genderPreference: profileForm.genderPreference,
+      ageRange: {
+        min: Number(profileForm.ageRangeMin),
+        max: Number(profileForm.ageRangeMax),
+      },
+      vibeWords: profileForm.vibeWords,
+      socialEnergy: profileForm.socialEnergy,
+      dateBudget: profileForm.dateBudget,
+      dateVibe: profileForm.dateVibe,
+      distance: profileForm.distance,
+      availability: profileForm.availability,
+      interests: profileForm.interests,
+    });
+
     const updatedProfile: UserProfile = {
+      uid: currentUser.uid,
       firstName: profile?.firstName || profileForm.firstName || '',
       lastName: profile?.lastName || profileForm.lastName || '',
       fullName:
@@ -219,10 +487,29 @@ export default function App() {
         `${profileForm.firstName.trim()} ${profileForm.lastName.trim()}`.trim() ||
         currentUser.displayName ||
         '',
+      name:
+        profile?.name ||
+        profile?.fullName ||
+        `${profileForm.firstName.trim()} ${profileForm.lastName.trim()}`.trim() ||
+        currentUser.displayName ||
+        '',
       age: profile?.age || Number(profileForm.age) || 18,
       yearAtUf: profile?.yearAtUf || profileForm.yearAtUf || '',
+      gender: profile?.gender || nextPreferences.genderIdentity,
+      genderPreference: profile?.genderPreference || nextPreferences.genderPreference,
+      ageRange: profile?.ageRange || nextPreferences.ageRange,
+      intention: profile?.intention || nextPreferences.intention,
+      interests: profile?.interests || nextPreferences.interests,
+      dateBudget: profile?.dateBudget || nextPreferences.dateBudget,
+      dateVibe: profile?.dateVibe || nextPreferences.dateVibe,
+      distance: profile?.distance || nextPreferences.distance,
+      availability: profile?.availability || nextPreferences.availability,
       email: currentUser.email || '',
       photoUrl,
+      preferences: nextPreferences,
+      likedUsers: profile?.likedUsers || [],
+      passedUsers: profile?.passedUsers || [],
+      matches: profile?.matches || [],
       onboardingCompleted: profile?.onboardingCompleted ?? true,
       createdAt: profile?.createdAt,
     };
@@ -317,7 +604,7 @@ export default function App() {
     try {
       const snapshot = await getDoc(doc(db, 'users', user.uid));
       const nextProfile = snapshot.exists()
-        ? (snapshot.data() as UserProfile)
+        ? normalizeUserProfile(snapshot.data() as Partial<UserProfile>, user.uid)
         : null;
 
       setFirestoreHealth('connected');
@@ -356,6 +643,12 @@ export default function App() {
 
     if (screen === 'signup-email' || screen === 'signup-verification' || screen === 'signin') {
       setScreen('intro');
+      return;
+    }
+
+    if (screen === 'preferences') {
+      setScreen('home');
+      setActiveTab('profile-tab');
     }
   };
 
@@ -531,14 +824,47 @@ export default function App() {
     setError('');
 
     try {
+      const nextPreferences = normalizePreferences({
+        intention: profileForm.intention,
+        genderIdentity: profileForm.genderIdentity,
+        genderPreference: profileForm.genderPreference,
+        ageRange: {
+          min: Number(profileForm.ageRangeMin),
+          max: Number(profileForm.ageRangeMax),
+        },
+        vibeWords: profileForm.vibeWords,
+        socialEnergy: profileForm.socialEnergy,
+        dateBudget: profileForm.dateBudget,
+        dateVibe: profileForm.dateVibe,
+        distance: profileForm.distance,
+        availability: profileForm.availability,
+        interests: profileForm.interests,
+      });
+
+      const fullName = `${profileForm.firstName.trim()} ${profileForm.lastName.trim()}`.trim();
       const nextProfile: UserProfile = {
+        uid: currentUser.uid,
         firstName: profileForm.firstName.trim(),
         lastName: profileForm.lastName.trim(),
-        fullName: `${profileForm.firstName.trim()} ${profileForm.lastName.trim()}`.trim(),
+        fullName,
+        name: fullName,
         age: Number(profileForm.age),
         yearAtUf: profileForm.yearAtUf,
+        gender: nextPreferences.genderIdentity,
+        genderPreference: nextPreferences.genderPreference,
+        ageRange: nextPreferences.ageRange,
+        intention: nextPreferences.intention,
+        interests: nextPreferences.interests,
+        dateBudget: nextPreferences.dateBudget,
+        dateVibe: nextPreferences.dateVibe,
+        distance: nextPreferences.distance,
+        availability: nextPreferences.availability,
         email: currentUser.email,
         photoUrl: profileForm.photoUrl,
+        preferences: nextPreferences,
+        likedUsers: profile?.likedUsers || [],
+        passedUsers: profile?.passedUsers || [],
+        matches: profile?.matches || [],
         onboardingCompleted: true,
         createdAt: profile?.createdAt || serverTimestamp(),
       };
@@ -556,14 +882,46 @@ export default function App() {
       setStatus('You are all set.');
     } catch (profileError) {
       if (isOfflineFirestoreError(profileError)) {
+        const nextPreferences = normalizePreferences({
+          intention: profileForm.intention,
+          genderIdentity: profileForm.genderIdentity,
+          genderPreference: profileForm.genderPreference,
+          ageRange: {
+            min: Number(profileForm.ageRangeMin),
+            max: Number(profileForm.ageRangeMax),
+          },
+          vibeWords: profileForm.vibeWords,
+          socialEnergy: profileForm.socialEnergy,
+          dateBudget: profileForm.dateBudget,
+          dateVibe: profileForm.dateVibe,
+          distance: profileForm.distance,
+          availability: profileForm.availability,
+          interests: profileForm.interests,
+        });
+        const fullName = `${profileForm.firstName.trim()} ${profileForm.lastName.trim()}`.trim();
         const nextProfile: UserProfile = {
+          uid: currentUser.uid,
           firstName: profileForm.firstName.trim(),
           lastName: profileForm.lastName.trim(),
-          fullName: `${profileForm.firstName.trim()} ${profileForm.lastName.trim()}`.trim(),
+          fullName,
+          name: fullName,
           age: Number(profileForm.age),
           yearAtUf: profileForm.yearAtUf,
+          gender: nextPreferences.genderIdentity,
+          genderPreference: nextPreferences.genderPreference,
+          ageRange: nextPreferences.ageRange,
+          intention: nextPreferences.intention,
+          interests: nextPreferences.interests,
+          dateBudget: nextPreferences.dateBudget,
+          dateVibe: nextPreferences.dateVibe,
+          distance: nextPreferences.distance,
+          availability: nextPreferences.availability,
           email: currentUser.email,
           photoUrl: profileForm.photoUrl,
+          preferences: nextPreferences,
+          likedUsers: profile?.likedUsers || [],
+          passedUsers: profile?.passedUsers || [],
+          matches: profile?.matches || [],
           onboardingCompleted: true,
           createdAt: profile?.createdAt,
         };
@@ -587,9 +945,195 @@ export default function App() {
   };
 
   const handleContinueFromAllSet = () => {
+    if (currentUser && profile) {
+      void findTopPreferenceMatches(currentUser.uid, profile)
+        .then((matches) => {
+          if (matches.length) {
+            setStatus(`Found ${matches.length} potential matches from profile preferences.`);
+          }
+        })
+        .catch(() => {
+          setStatus('');
+        });
+    }
+
     setScreen('home');
     setActiveTab('swipe');
-    setStatus('');
+  };
+
+  const handleOpenPreferences = () => {
+    setProfileForm((current) => ({
+      ...current,
+      intention: profile?.preferences.intention || current.intention,
+      genderIdentity: profile?.preferences.genderIdentity || current.genderIdentity,
+      genderPreference: profile?.preferences.genderPreference || current.genderPreference,
+      ageRangeMin: String(profile?.preferences.ageRange.min || current.ageRangeMin),
+      ageRangeMax: String(profile?.preferences.ageRange.max || current.ageRangeMax),
+      vibeWords: profile?.preferences.vibeWords || current.vibeWords,
+      socialEnergy: profile?.preferences.socialEnergy ?? current.socialEnergy,
+      dateBudget: profile?.preferences.dateBudget || current.dateBudget,
+      dateVibe: profile?.preferences.dateVibe || current.dateVibe,
+      distance: profile?.preferences.distance || current.distance,
+      availability: profile?.preferences.availability || current.availability,
+      interests: profile?.preferences.interests || current.interests,
+    }));
+    setScreen('preferences');
+  };
+
+  const handlePreferencesSave = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    if (!currentUser || !currentUser.email) {
+      setError('You need to be signed in before saving preferences.');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+
+    const minAge = Number(profileForm.ageRangeMin);
+    const maxAge = Number(profileForm.ageRangeMax);
+
+    if (minAge < 18 || maxAge < 18 || minAge > maxAge) {
+      setError('Choose a valid age range (minimum 18 and min <= max).');
+      setLoading(false);
+      return;
+    }
+
+    if (profileForm.vibeWords.length > 3) {
+      setError('Pick up to 3 vibe words.');
+      setLoading(false);
+      return;
+    }
+
+    if (profileForm.interests.length > 10) {
+      setError('Pick up to 10 interests.');
+      setLoading(false);
+      return;
+    }
+
+    const nextPreferences: Preferences = {
+      intention: profileForm.intention,
+      genderIdentity: profileForm.genderIdentity,
+      genderPreference: profileForm.genderPreference,
+      ageRange: {
+        min: minAge,
+        max: maxAge,
+      },
+      vibeWords: profileForm.vibeWords,
+      socialEnergy: profileForm.socialEnergy,
+      dateBudget: profileForm.dateBudget,
+      dateVibe: profileForm.dateVibe,
+      distance: profileForm.distance,
+      availability: profileForm.availability,
+      interests: profileForm.interests,
+    };
+
+    const fullName =
+      profile?.fullName ||
+      `${profileForm.firstName.trim()} ${profileForm.lastName.trim()}`.trim() ||
+      currentUser.displayName ||
+      '';
+    const updatedProfile: UserProfile = {
+      uid: currentUser.uid,
+      firstName: profile?.firstName || profileForm.firstName || '',
+      lastName: profile?.lastName || profileForm.lastName || '',
+      fullName,
+      name: fullName,
+      age: profile?.age || Number(profileForm.age) || 18,
+      yearAtUf: profile?.yearAtUf || profileForm.yearAtUf || '',
+      gender: nextPreferences.genderIdentity,
+      genderPreference: nextPreferences.genderPreference,
+      ageRange: nextPreferences.ageRange,
+      intention: nextPreferences.intention,
+      interests: nextPreferences.interests,
+      dateBudget: nextPreferences.dateBudget,
+      dateVibe: nextPreferences.dateVibe,
+      distance: nextPreferences.distance,
+      availability: nextPreferences.availability,
+      email: currentUser.email,
+      photoUrl: profile?.photoUrl || profileForm.photoUrl || '',
+      preferences: nextPreferences,
+      likedUsers: profile?.likedUsers || [],
+      passedUsers: profile?.passedUsers || [],
+      matches: profile?.matches || [],
+      onboardingCompleted: profile?.onboardingCompleted ?? true,
+      createdAt: profile?.createdAt,
+    };
+
+    saveLocalProfile(currentUser.uid, updatedProfile);
+    setProfile(updatedProfile);
+
+    try {
+      if (db) {
+        await setDoc(
+          doc(db, 'users', currentUser.uid),
+          {
+            preferences: nextPreferences,
+            gender: updatedProfile.gender,
+            genderPreference: updatedProfile.genderPreference,
+            ageRange: updatedProfile.ageRange,
+            intention: updatedProfile.intention,
+            interests: updatedProfile.interests,
+            dateBudget: updatedProfile.dateBudget,
+            dateVibe: updatedProfile.dateVibe,
+            distance: updatedProfile.distance,
+            availability: updatedProfile.availability,
+          },
+          { merge: true },
+        );
+        setFirestoreHealth('connected');
+      }
+
+      setScreen('home');
+      setActiveTab('profile-tab');
+      setStatus('Preferences saved.');
+    } catch (preferencesError) {
+      if (isOfflineFirestoreError(preferencesError)) {
+        setFirestoreHealth('fallback');
+        setScreen('home');
+        setActiveTab('profile-tab');
+        setStatus('Preferences saved on this device. Firestore will sync later.');
+        return;
+      }
+
+      setError(
+        preferencesError instanceof Error
+          ? preferencesError.message
+          : 'Unable to save preferences right now.',
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const findTopPreferenceMatches = async (userId: string, currentProfile: UserProfile) => {
+    if (!db) {
+      return [] as Array<{ id: string; profile: UserProfile; score: number }>;
+    }
+
+    const profilesQuery = query(
+      collection(db, 'users'),
+      where('onboardingCompleted', '==', true),
+      limit(50),
+    );
+    const snapshot = await getDocs(profilesQuery);
+
+    return snapshot.docs
+      .filter((profileDoc) => profileDoc.id !== userId)
+      .map((profileDoc) => {
+        const candidateProfile = normalizeUserProfile(
+          profileDoc.data() as Partial<UserProfile>,
+          profileDoc.id,
+        );
+
+        return {
+          id: profileDoc.id,
+          profile: candidateProfile,
+          score: compareProfilesByPreferences(currentProfile, candidateProfile),
+        };
+      })
+      .sort((left, right) => right.score - left.score);
   };
 
   const handleSignOut = async () => {
@@ -762,6 +1306,24 @@ export default function App() {
               <p className="account-label">About</p>
               <h3>{profile?.yearAtUf || 'UF Student'}</h3>
               <p>{profile?.age ? `${profile.age} years old` : 'Add more details to make matching better.'}</p>
+              <p>Intent: {profile?.intention || 'Open'}</p>
+              <p>Show me: {profile?.genderPreference || 'Any'}</p>
+              <p>
+                Age range: {profile?.ageRange?.min || 18}-{profile?.ageRange?.max || 25}
+              </p>
+              <p>
+                Interests: {profile?.interests.length ? profile.interests.join(', ') : 'Add interests'}
+              </p>
+              <p>
+                Date vibe: {profile?.dateVibe.length ? profile.dateVibe.join(', ') : 'Set your date vibe'}
+              </p>
+              <button
+                className="secondary-button tile-button"
+                type="button"
+                onClick={handleOpenPreferences}
+              >
+                Edit Preferences
+              </button>
             </article>
             <article className="home-tile">
               <p className="account-label">Session</p>
@@ -834,6 +1396,27 @@ export default function App() {
       return;
     }
 
+    const nextLikedUserIds = profile?.likedUsers.includes(currentDater.id)
+      ? profile.likedUsers
+      : [...(profile?.likedUsers || []), currentDater.id];
+
+    if (currentUser && profile) {
+      const nextProfile = {
+        ...profile,
+        likedUsers: nextLikedUserIds,
+      };
+      setProfile(nextProfile);
+      saveLocalProfile(currentUser.uid, nextProfile);
+
+      if (db) {
+        void setDoc(
+          doc(db, 'users', currentUser.uid),
+          { likedUsers: nextLikedUserIds },
+          { merge: true },
+        );
+      }
+    }
+
     setLikedDaters((current) =>
       current.some((dater) => dater.id === currentDater.id)
         ? current
@@ -845,6 +1428,27 @@ export default function App() {
   const handlePass = () => {
     if (!currentDater) {
       return;
+    }
+
+    const nextPassedUserIds = profile?.passedUsers.includes(currentDater.id)
+      ? profile.passedUsers
+      : [...(profile?.passedUsers || []), currentDater.id];
+
+    if (currentUser && profile) {
+      const nextProfile = {
+        ...profile,
+        passedUsers: nextPassedUserIds,
+      };
+      setProfile(nextProfile);
+      saveLocalProfile(currentUser.uid, nextProfile);
+
+      if (db) {
+        void setDoc(
+          doc(db, 'users', currentUser.uid),
+          { passedUsers: nextPassedUserIds },
+          { merge: true },
+        );
+      }
     }
 
     setSwipeIndex((current) => current + 1);
@@ -1079,6 +1683,240 @@ export default function App() {
           </label>
           <button className="primary-button" type="submit" disabled={loading}>
             {loading ? 'Saving...' : 'Continue'}
+          </button>
+        </form>
+      </div>,
+    );
+  }
+
+  if (screen === 'preferences') {
+    return renderFrame(
+      <div className="screen info-screen preferences-screen">
+        <button className="back-button" onClick={handleBack} type="button">
+          <img src={backArrrow} alt="Back Arrow" />
+        </button>
+        <div className="form-copy">
+          <h1 className="script-title">Preferences</h1>
+          <h3>Choose your matching preferences.</h3>
+        </div>
+        <form className="auth-form" onSubmit={handlePreferencesSave}>
+          <label>
+            Dating Intention
+            <select
+              className="preferences-select"
+              value={profileForm.intention}
+              onChange={(event) =>
+                setProfileForm((current) => ({ ...current, intention: event.target.value }))
+              }
+            >
+              {datingIntentionOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Gender Identity
+            <select
+              className="preferences-select"
+              value={profileForm.genderIdentity}
+              onChange={(event) =>
+                setProfileForm((current) => ({ ...current, genderIdentity: event.target.value }))
+              }
+            >
+              <option value="">Select gender identity</option>
+              {genderIdentityOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Show Me
+            <select
+              className="preferences-select"
+              value={profileForm.genderPreference}
+              onChange={(event) =>
+                setProfileForm((current) => ({ ...current, genderPreference: event.target.value }))
+              }
+            >
+              {genderPreferenceOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Minimum Age
+            <select
+              className="preferences-select"
+              value={profileForm.ageRangeMin}
+              onChange={(event) =>
+                setProfileForm((current) => ({ ...current, ageRangeMin: event.target.value }))
+              }
+            >
+              {Array.from({ length: 23 }, (_, index) => 18 + index).map((ageOption) => (
+                <option key={ageOption} value={String(ageOption)}>
+                  {ageOption}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Maximum Age
+            <select
+              className="preferences-select"
+              value={profileForm.ageRangeMax}
+              onChange={(event) =>
+                setProfileForm((current) => ({ ...current, ageRangeMax: event.target.value }))
+              }
+            >
+              {Array.from({ length: 23 }, (_, index) => 18 + index).map((ageOption) => (
+                <option key={ageOption} value={String(ageOption)}>
+                  {ageOption}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div>
+            <label>Pick up to 3 vibe words</label>
+            <div className="hobbies-scroll-list">
+              {vibeWordOptions.map((word) => (
+                <label key={word} className="hobby-option-row">
+                  <input
+                    type="checkbox"
+                    checked={profileForm.vibeWords.includes(word)}
+                    onChange={() =>
+                      setProfileForm((current) => ({
+                        ...current,
+                        vibeWords: current.vibeWords.includes(word)
+                          ? current.vibeWords.filter((currentWord) => currentWord !== word)
+                          : current.vibeWords.length >= 3
+                            ? current.vibeWords
+                            : [...current.vibeWords, word],
+                      }))
+                    }
+                  />
+                  <span className="hobby-option-text">{word}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+          <label>
+            Social Energy: {profileForm.socialEnergy}
+            <input
+              type="range"
+              min="0"
+              max="100"
+              step="5"
+              value={profileForm.socialEnergy}
+              onChange={(event) =>
+                setProfileForm((current) => ({
+                  ...current,
+                  socialEnergy: Number(event.target.value),
+                }))
+              }
+            />
+          </label>
+          <label>
+            Budget
+            <select
+              className="preferences-select"
+              value={profileForm.dateBudget}
+              onChange={(event) =>
+                setProfileForm((current) => ({ ...current, dateBudget: event.target.value }))
+              }
+            >
+              {dateBudgetOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div>
+            <label>Date vibe (pick one or more)</label>
+            <div className="hobbies-scroll-list">
+              {dateVibeOptions.map((vibe) => (
+                <label key={vibe} className="hobby-option-row">
+                  <input
+                    type="checkbox"
+                    checked={profileForm.dateVibe.includes(vibe)}
+                    onChange={() =>
+                      setProfileForm((current) => ({
+                        ...current,
+                        dateVibe: current.dateVibe.includes(vibe)
+                          ? current.dateVibe.filter((currentVibe) => currentVibe !== vibe)
+                          : [...current.dateVibe, vibe],
+                      }))
+                    }
+                  />
+                  <span className="hobby-option-text">{vibe}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+          <label>
+            Distance
+            <select
+              className="preferences-select"
+              value={profileForm.distance}
+              onChange={(event) =>
+                setProfileForm((current) => ({ ...current, distance: event.target.value }))
+              }
+            >
+              {distanceOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Availability
+            <select
+              className="preferences-select"
+              value={profileForm.availability[0] || 'either'}
+              onChange={(event) =>
+                setProfileForm((current) => ({ ...current, availability: [event.target.value] }))
+              }
+            >
+              {availabilityOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div>
+            <label>Interests (pick up to 10)</label>
+            <div className="hobbies-scroll-list">
+              {interestOptions.map((interest) => (
+                <label key={interest} className="hobby-option-row">
+                  <input
+                    type="checkbox"
+                    checked={profileForm.interests.includes(interest)}
+                    onChange={() =>
+                      setProfileForm((current) => ({
+                        ...current,
+                        interests: current.interests.includes(interest)
+                          ? current.interests.filter((currentInterest) => currentInterest !== interest)
+                          : current.interests.length >= 10
+                            ? current.interests
+                            : [...current.interests, interest],
+                      }))
+                    }
+                  />
+                  <span className="hobby-option-text">{interest}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+          <button className="primary-button" type="submit" disabled={loading}>
+            {loading ? 'Saving...' : 'Save Preferences'}
           </button>
         </form>
       </div>,

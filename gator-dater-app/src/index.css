@@ -148,6 +148,14 @@ code {
   overflow: hidden;
 }
 
+.preferences-screen {
+  justify-content: flex-start;
+  align-items: stretch;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-top: 18cqw;
+}
+
 .home-screen {
   justify-content: space-between;
   gap: 1rem;
@@ -185,6 +193,18 @@ p, label, input {
 .home-grid {
   display: grid;
   gap: 2.35cqh;
+}
+
+.auth-form,
+.button-stack {
+  width: 100%;
+}
+
+.auth-form > label,
+.auth-form > div,
+.auth-form > input,
+.auth-form > button {
+  width: 100%;
 }
 
 button,
@@ -272,8 +292,8 @@ button:active {
 }
 
 .auth-form select {
-  height: 12.7cqw;
-  width: 100%;
+  height: 74px;
+  width: min(313px, 100%);
   padding: 0 0.8rem;
   border-radius: 10px;
   border: 1px solid var(--color-pink);
@@ -282,7 +302,7 @@ button:active {
   
   text-align: left;
   display: block;
-  line-height: 12.7cqw;
+  line-height: 74px;
 
   font-family: 'Zilla Slab', serif;
   font-size: 4.1cqw;
@@ -304,6 +324,40 @@ button:active {
 
 .auth-form select:invalid {
   color: var(--color-lightPink);
+}
+
+.auth-form .preferences-select {
+  height: 12.7cqw;
+  line-height: 12.7cqw;
+}
+
+.hobbies-scroll-list {
+  border: 1px solid var(--color-pink);
+  border-radius: 10px;
+  padding: 0.55rem 0.7rem;
+  max-height: 28cqw;
+  overflow-y: auto;
+  display: grid;
+  gap: 0.3rem;
+  background: #fff;
+}
+
+.hobby-option-row {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.2rem 0.1rem;
+}
+
+.hobby-option-row input[type='checkbox'] {
+  width: 0.95rem;
+  height: 0.95rem;
+}
+
+.hobby-option-text {
+  font-size: 3.5cqw;
+  line-height: 1.2;
+  color: var(--color-blackPink);
 }
 
 .auth-form select option {
