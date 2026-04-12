@@ -712,6 +712,11 @@ hr {
   color: var(--color-blackPink);
 }
 
+input:focus {
+  outline: none;
+  border: 1px solid var(--color-darkPink);
+}
+
 .submit-button {
   width: 12.7cqw;
   height: 12.7cqw;
