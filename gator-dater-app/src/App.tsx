@@ -31,6 +31,8 @@ import chatIcon from '../assets/chatIcon.png';
 import userIcon from '../assets/userIcon.png';
 import likeIcon from '../assets/likeIcon.png';
 import dislikeIcon from '../assets/dislikeIcon.png';
+import searchIcon from '../assets/searchIcon.png';
+import submitIcon from '../assets/submitIcon.png';
 import './index.css';
 
 const gatorImg = gatorImage;
@@ -43,7 +45,8 @@ const chatImg = chatIcon;
 const userImg = userIcon;
 const likeImg = likeIcon;
 const dislikeImg = dislikeIcon;
-
+const searchImg = searchIcon;
+const submitImg = submitIcon;
 type Screen =
   | 'intro'
   | 'signup-email'
@@ -1693,23 +1696,16 @@ export default function App() {
     if (activeTab === 'calendar') {
       return (
         <>
-          <section className="welcome-panel">
-            <p className="account-label">Calendar</p>
-            <h2>Saved dates and upcoming plans</h2>
-            <p className="account-detail">Keep every coffee, study date, and dinner plan in one place.</p>
+          <section className="calendar">
+            <h2>Calendar</h2>
+            <div className="calendar-grid">
+            </div>
           </section>
 
           <section className="home-grid">
             <article className="home-tile">
-              <p className="account-label">Friday</p>
-              <h3>Pascal's Coffeehouse</h3>
+              <h3>Pascal's Coffeehouse - Friday</h3>
               <p>7:00 PM with Maya. Saved as a casual first date near campus.</p>
-            </article>
-
-            <article className="home-tile">
-              <p className="account-label">Planner</p>
-              <h3>Need another idea?</h3>
-              <p>Move over to Plan to build a date around vibes, budget, and distance.</p>
             </article>
           </section>
         </>
@@ -1719,24 +1715,38 @@ export default function App() {
     if (activeTab === 'planner') {
       return (
         <>
-          <section className="welcome-panel">
-            <p className="account-label">Plan the Date</p>
-            <h2>AI-assisted local date ideas</h2>
-            <p className="account-detail">Describe the kind of date you want and get Gainesville-friendly suggestions.</p>
+          <p className="account-detail">Describe the kind of date you want and get Gainesville-friendly suggestions.</p>
+
+          <section className="prompt-grid">
+            <button className="prompt-button">
+              <p>Local coffee shops</p>
+              <img src={searchImg} alt="Search" className="Search" />
+            </button>
+            <button className="prompt-button">
+              <p>Date ideas for [insert person here]</p>
+              <img src={searchImg} alt="Search" className="Search" />
+            </button>
+            <button className="prompt-button">
+              <p>Best days for picnic near me</p>
+              <img src={searchImg} alt="Search" className="Search" />
+            </button>
           </section>
 
-          <section className="home-grid">
-            <article className="home-tile">
-              <p className="account-label">Prompt</p>
-              <h3>Cheap and low-key</h3>
-              <p>Think coffee, a walk by Lake Alice, and dessert after if the vibe is good.</p>
-            </article>
-
-            <article className="home-tile">
-              <p className="account-label">Spot idea</p>
-              <h3>Depot Park picnic</h3>
-              <p>Open space, easy parking, and a relaxed place to talk without pressure.</p>
-            </article>
+          <section className="chat">
+            <div className="chat-section">
+              <div className="message-from-other">
+                <p>Hello! How can I help you find the perfect date idea?</p>
+              </div>
+              <div className="message-from-user">
+                <p>I'm looking for a fun and casual date idea near campus for this weekend.</p>
+              </div>
+            </div>
+            <div className="chat-input">
+              <input type="text" placeholder="Ask for date ideas..." />
+              <button className="submit-button" type="button">
+                <img src={submitImg} alt="Send" className="send-icon" />
+              </button>
+            </div>
           </section>
         </>
       );
@@ -1744,33 +1754,32 @@ export default function App() {
 
     if (activeTab === 'chats') {
       return (
-        <>
-          <section className="welcome-panel">
-            <p className="account-label">Chats</p>
-            <h2>Keep the conversation moving</h2>
-            <p className="account-detail">Jump back into recent messages and plan the next step.</p>
-          </section>
+        <section className="home-grid">
+          {/* Example 1: Ava */}
+          <article className="chat-match-row unread">
+            <div className="profile-circle-mini" />
+            <div className="chat-text-meta">
+              <h3 className="chat-name">Ava</h3>
+              <p className="chat-preview">That coffee place looks cute. Want to go Thursday?</p>
+            </div>
+          </article>
 
-          <section className="home-grid">
-            <article className="home-tile">
-              <p className="account-label">New</p>
-              <h3>Ava</h3>
-              <p>"That coffee place looks cute. Want to go Thursday?"</p>
-            </article>
-            <article className="home-tile">
-              <p className="account-label">Unread</p>
-              <h3>Jordan</h3>
-              <p>"What kind of food do you usually like for first dates?"</p>
-            </article>
-          </section>
-        </>
+          {/* Example 2: Jordan */}
+          <article className="chat-match-row">
+            <div className="profile-circle-mini" />
+            <div className="chat-text-meta">
+              <h3 className="chat-name">Jordan</h3>
+              <p className="chat-preview">What kind of food do you usually like for first dates?</p>
+            </div>
+          </article>
+        </section>
       );
     }
 
     if (activeTab === 'profile-tab') {
       return (
         <>
-          <section className="welcome-panel">
+          <section className="intro-profile-panel">
             {profile?.photoUrl || currentUser?.photoURL ? (
               <div className="profile-photo-wrap">
                 <img
@@ -1780,8 +1789,7 @@ export default function App() {
                 />
               </div>
             ) : null}
-            <p className="account-label">Profile</p>
-            <h2>{profile?.fullName || currentUser?.displayName || currentUser?.email}</h2>
+            <h1>{profile?.fullName || currentUser?.displayName || currentUser?.email}</h1>
             <p className="account-detail">{currentUser?.email}</p>
             <input
               ref={profilePhotoInputRef}
@@ -1799,23 +1807,18 @@ export default function App() {
             </button>
           </section>
           <section className="home-grid">
-            <article className="home-tile">
-              <p className="account-label">About</p>
-              <h3>{profile?.yearAtUf || 'UF Student'}</h3>
-              <p>{profile?.age ? `${profile.age} years old` : 'Add more details to make matching better.'}</p>
-              <p>{profile?.bio || 'Add a bio so people can get to know you.'}</p>
+            <article className="profile-tile">
+              <h3 style={{ textDecoration: 'underline' }}>About Me</h3>
+              <p>{profile?.yearAtUf || 'UF Student'}</p>
+              <p>{profile?.age ? `${profile.age} years old` : '*Add more details to make matching better.*'}</p>
+              <p>{profile?.bio || '*Add a bio so people can get to know you.*'}</p>
               <p>Intent: {profile?.intention || 'Open'}</p>
+              <h3 style={{ textDecoration: 'underline' }}>My Preferences</h3>
               <p>Show me: {profile?.genderPreference || 'Any'}</p>
               <p>Open to: {profile?.intentionOpenTo || 'Open to anything'}</p>
-              <p>
-                Age range: {profile?.ageRange?.min || 18}-{profile?.ageRange?.max || 25}
-              </p>
-              <p>
-                Interests: {profile?.interests.length ? profile.interests.join(', ') : 'Add interests'}
-              </p>
-              <p>
-                Date vibe: {profile?.dateVibe.length ? profile.dateVibe.join(', ') : 'Set your date vibe'}
-              </p>
+              <p>Age range: {profile?.ageRange?.min || 18}-{profile?.ageRange?.max || 25}</p>
+              <p>Interests: {profile?.interests.length ? profile.interests.join(', ') : '*Add interests*'}</p>
+              <p>Date vibe: {profile?.dateVibe.length ? profile.dateVibe.join(', ') : '*Set your date vibe*'}</p>
               <button
                 className="secondary-button tile-button"
                 type="button"
@@ -1824,9 +1827,9 @@ export default function App() {
                 Edit Preferences
               </button>
             </article>
-            <article className="home-tile">
-              <p className="account-label">Session</p>
-              <h3>Account controls</h3>
+
+            <article className="profile-tile">
+              <h3 style={{ textDecoration: 'underline' }}>Account controls</h3>
               <p>Review your saved likes or sign out below when you are done.</p>
               <button
                 className="primary-button tile-button"
@@ -1858,14 +1861,14 @@ export default function App() {
       <>
         <section className="swipe-stack">
           {currentDater ? (
-            <article className="swipe-card">
-              <p className="account-label">{currentDater.compatibility}% match</p>
-              <h3>
+            <article className="swipe-card" /*style={{ backgroundImage: `url(${currentDater.image})` }} */>
+              <p>{currentDater.compatibility}% match</p>
+              <h2>
                 {currentDater.name}, {currentDater.age}
-              </h3>
+              </h2>
               <p>{currentDater.yearAtUf}</p>
-              <p>{currentDater.bio}</p>
               <p className="swipe-vibe">{currentDater.vibe}</p>
+              <p>{currentDater.bio}</p>
             </article>
           ) : (
             <article className="swipe-card done-card">
@@ -1876,11 +1879,11 @@ export default function App() {
           )}
         </section>
         <div className="swipe-actions">
-          <button className="secondary-button swipe-button" type="button" onClick={handlePass} disabled={!currentDater}>
-            Pass
+          <button className="Ellipse1 action-btn" type="button" onClick={handlePass} disabled={!currentDater}>
+            <img className="action-btn-icon" src={dislikeImg} alt="Dislike" />
           </button>
-          <button className="primary-button swipe-button" type="button" onClick={handleLike} disabled={!currentDater}>
-            Like
+          <button className="Ellipse2 action-btn" type="button" onClick={handleLike} disabled={!currentDater}>
+            <img className="action-btn-icon" src={likeImg} alt="Like" />
           </button>
         </div>
         {/* //for firebase accounts info */}
@@ -2277,24 +2280,23 @@ export default function App() {
         </button>
         <div className="form-copy">
           <h1 className="script-title">Preferences</h1>
-          <h3>Choose your matching preferences.</h3>
+          <h3>All about you and your ideal match</h3>
         </div>
-        <div className="inline-links" style={{ width: '100%' }}>
+        <div className="inline-buttons">
           <button
-            className="secondary-button"
+            /* This evaluates to true on load, applying the 'selected' class */
+            className={`primary-button ${preferencesSection === 'preferences' ? 'selected' : ''}`}
             type="button"
             onClick={() => setPreferencesSection('preferences')}
-            style={{ opacity: preferencesSection === 'preferences' ? 1 : 0.6 }}
           >
-            Your Preferences
+            Your Info
           </button>
           <button
-            className="secondary-button"
+            className={`secondary-button ${preferencesSection === 'deal-breakers' ? 'selected' : ''}`}
             type="button"
             onClick={() => setPreferencesSection('deal-breakers')}
-            style={{ opacity: preferencesSection === 'deal-breakers' ? 1 : 0.6 }}
           >
-            Dislikes / Deal Breakers
+            Matching Preferences
           </button>
         </div>
         <form className="auth-form" onSubmit={handlePreferencesSave}>
@@ -2334,7 +2336,7 @@ export default function App() {
                 </select>
               </label>
               <div>
-                <label>Pick up to 3 vibe words</label>
+                <label>Describe yourself (Pick up to 3)</label>
                 <div className="hobbies-scroll-list">
                   {vibeWordOptions.map((word) => (
                     <label key={word} className="hobby-option-row">
@@ -2364,6 +2366,7 @@ export default function App() {
                   min="0"
                   max="100"
                   step="5"
+                  className="social-range"
                   value={profileForm.socialEnergy}
                   onChange={(event) =>
                     setProfileForm((current) => ({
@@ -2560,10 +2563,8 @@ export default function App() {
   return renderFrame(
     <div className="screen home-screen">
       <div className="home-header">
-        <div>
-          <p className="eyebrow">Gator Dator</p>
-          <h1 className="script-title">Home</h1>
-        </div>
+        <p className="eyebrow">Gator Dator</p>
+        <hr></hr>
         {/* <div className="header-badges">
           <div className={firestoreHealth === 'connected' ? 'health-pill healthy' : firestoreHealth === 'fallback' ? 'health-pill warning-pill' : 'health-pill'}>
             {firestoreLabel}
@@ -2575,10 +2576,7 @@ export default function App() {
         <div className="likes-modal">
           <div className="likes-modal-card">
             <div className="likes-modal-header">
-              <div>
-                <p className="account-label">Likes</p>
-                <h2>Saved matches</h2>
-              </div>
+              <h2>Saved matches</h2>
               <button className="link-button" type="button" onClick={() => setLikesModalOpen(false)}>
                 Close
               </button>
@@ -2587,14 +2585,12 @@ export default function App() {
               <div className="likes-list">
                 {likedDaters.map((dater) => (
                   <article key={dater.id} className="liked-card">
-                    <div>
-                      <p className="account-label">{dater.compatibility}% match</p>
-                      <h3>
-                        {dater.name}, {dater.age}
-                      </h3>
-                      <p>{dater.yearAtUf}</p>
-                      <p>{dater.vibe}</p>
-                    </div>
+                    <p className="account-label">{dater.compatibility}% match</p>
+                    <h3>
+                      {dater.name}, {dater.age}
+                    </h3>
+                    <p>{dater.yearAtUf}</p>
+                    <p>{dater.vibe}</p>
                     <button className="secondary-button unlike-button" type="button" onClick={() => handleUnlike(dater.id)}>
                       Unlike
                     </button>
@@ -2611,10 +2607,7 @@ export default function App() {
         <div className="likes-modal">
           <div className="likes-modal-card">
             <div className="likes-modal-header">
-              <div>
-                <p className="account-label">Matches</p>
-                <h2>Mutual connections</h2>
-              </div>
+              <h2>Mutual connections</h2>
               <button className="link-button" type="button" onClick={() => setMatchesModalOpen(false)}>
                 Close
               </button>
@@ -2623,14 +2616,12 @@ export default function App() {
               <div className="likes-list">
                 {matchedDaters.map((dater) => (
                   <article key={dater.id} className="liked-card">
-                    <div>
-                      <p className="account-label">{dater.compatibility}% match</p>
-                      <h3>
-                        {dater.name}, {dater.age}
-                      </h3>
-                      <p>{dater.yearAtUf}</p>
-                      <p>{dater.bio}</p>
-                    </div>
+                    <p className="account-label">{dater.compatibility}% match</p>
+                    <h3>
+                      {dater.name}, {dater.age}
+                    </h3>
+                    <p>{dater.yearAtUf}</p>
+                    <p>{dater.bio}</p>
                   </article>
                 ))}
               </div>
@@ -2640,64 +2631,62 @@ export default function App() {
           </div>
         </div>
       ) : null}
-      <div className="nav-container">
-        {renderTabContent()}
+      {renderTabContent()}
 
-        <nav className="tab-bar">
-          {/* Background Rect */}
-          <div className="nav-bg" />
+      <nav className="tab-bar">
+        {/* Background Rect */}
+        <div className="nav-bg" />
 
-          {/* Moving Circle - Positions itself based on activeTab */}
-          <div className={`active-indicator pos-${activeTab}`} />
+        {/* Moving Circle - Positions itself based on activeTab */}
+        <div className={`active-indicator pos-${activeTab}`} />
 
-          <div className="icons-wrapper">
-            <div className="icons-wrapper-extra">
-              <button
-                className={activeTab === 'calendar' ? 'tab-button active' : 'tab-button'}
-                onClick={() => setActiveTab('calendar')}
-              >
-                <span className="tab-icon">
-                  <img src={calenderImg} alt="Calendar" />
-                </span>
-              </button>
-              <button
-                className={activeTab === 'planner' ? 'tab-button active' : 'tab-button'}
-                onClick={() => setActiveTab('planner')}
-              >
-                <span className="tab-icon">
-                  <img src={writeImg} alt="Write" />
-                </span>
-              </button>
-            </div>
+        <div className="icons-wrapper">
+          <div className="icons-wrapper-extra">
             <button
-              className={activeTab === 'swipe' ? 'tab-button active' : 'tab-button'}
-              onClick={() => setActiveTab('swipe')}
+              className={activeTab === 'calendar' ? 'tab-button active' : 'tab-button'}
+              onClick={() => setActiveTab('calendar')}
             >
               <span className="tab-icon">
-                <img src={heartNavImg} alt="Like" />
+                <img src={calenderImg} alt="Calendar" />
               </span>
             </button>
-            <div className="icons-wrapper-extra">
-              <button
-                className={activeTab === 'chats' ? 'tab-button active' : 'tab-button'}
-                onClick={() => setActiveTab('chats')}
-              >
-                <span className="tab-icon">
-                  <img src={chatImg} alt="Chats" />
-                </span>
-              </button>
-              <button
-                className={activeTab === 'profile-tab' ? 'tab-button active' : 'tab-button'}
-                onClick={() => setActiveTab('profile-tab')}
-              >
-                <span className="tab-icon">
-                  <img src={userImg} alt="Profile" />
-                </span>
-              </button>
-            </div>
+            <button
+              className={activeTab === 'planner' ? 'tab-button active' : 'tab-button'}
+              onClick={() => setActiveTab('planner')}
+            >
+              <span className="tab-icon">
+                <img src={writeImg} alt="Write" />
+              </span>
+            </button>
           </div>
-        </nav>
-      </div>
+          <button
+            className={activeTab === 'swipe' ? 'tab-button active' : 'tab-button'}
+            onClick={() => setActiveTab('swipe')}
+          >
+            <span className="tab-icon">
+              <img src={heartNavImg} alt="Like" />
+            </span>
+          </button>
+          <div className="icons-wrapper-extra">
+            <button
+              className={activeTab === 'chats' ? 'tab-button active' : 'tab-button'}
+              onClick={() => setActiveTab('chats')}
+            >
+              <span className="tab-icon">
+                <img src={chatImg} alt="Chats" />
+              </span>
+            </button>
+            <button
+              className={activeTab === 'profile-tab' ? 'tab-button active' : 'tab-button'}
+              onClick={() => setActiveTab('profile-tab')}
+            >
+              <span className="tab-icon">
+                <img src={userImg} alt="Profile" />
+              </span>
+            </button>
+          </div>
+        </div>
+      </nav>
 
     </div>,
   );
