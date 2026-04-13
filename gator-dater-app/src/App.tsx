@@ -34,6 +34,7 @@ import likeIcon from '../assets/likeIcon.png';
 import dislikeIcon from '../assets/dislikeIcon.png';
 import searchIcon from '../assets/searchIcon.png';
 import submitIcon from '../assets/submitIcon.png';
+import { generatePlannerReply, isGeminiConfigured, type PlannerChatMessage } from './gemini';
 import './index.css';
 
 const gatorImg = gatorImage;
@@ -69,6 +70,12 @@ type Dater = {
   bio: string;
   compatibility: number;
   vibe: string;
+};
+
+type PlannerPrompt = {
+  id: string;
+  label: string;
+  prompt: string;
 };
 
 type SignUpState = {
@@ -672,6 +679,32 @@ const isOfflineFirestoreError = (value: unknown) =>
     value.message.toLowerCase().includes('offline') ||
     value.message.toLowerCase().includes('unavailable'));
 const getProfileStorageKey = (uid: string) => `gator-dater-profile:${uid}`;
+const plannerGreeting =
+  'Hi! I can help plan Gainesville-friendly dates around your budget, vibe, and schedule. Tell me what you want, and I’ll suggest a few options.';
+const buildPlannerPrompts = (currentProfile: UserProfile | null): PlannerPrompt[] => {
+  const interest = currentProfile?.interests[0] || currentProfile?.preferences.interests[0] || 'coffee';
+  const vibe = currentProfile?.dateVibe[0] || currentProfile?.preferences.dateVibe[0] || 'casual';
+  const availability = currentProfile?.availability[0] || currentProfile?.preferences.availability[0] || 'this weekend';
+  const budget = currentProfile?.dateBudget || currentProfile?.preferences.dateBudget || 'low';
+
+  return [
+    {
+      id: 'quick-coffee',
+      label: 'Local coffee shops',
+      prompt: `Plan a ${budget}-budget coffee date near UF with two cozy spots and an easy follow-up activity.`,
+    },
+    {
+      id: 'quick-personalized',
+      label: `Ideas for someone into ${interest}`,
+      prompt: `Suggest three ${vibe} date ideas in Gainesville for someone who likes ${interest}.`,
+    },
+    {
+      id: 'quick-weekend',
+      label: 'Best picnic timing',
+      prompt: `Plan a ${vibe} outdoor date around ${availability} with a picnic-friendly Gainesville route and backup indoor option.`,
+    },
+  ];
+};
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>('intro');
@@ -694,7 +727,14 @@ export default function App() {
   const [discoveryFeed, setDiscoveryFeed] = useState<Dater[]>(() => buildSampleDiscoveryFeed());
   const [discoveryFeedSource, setDiscoveryFeedSource] = useState<'sample' | 'firestore'>('sample');
   const [preferencesSection, setPreferencesSection] = useState<'preferences' | 'deal-breakers'>('preferences');
+  const [plannerMessages, setPlannerMessages] = useState<PlannerChatMessage[]>([
+    { role: 'assistant', text: plannerGreeting },
+  ]);
+  const [plannerInput, setPlannerInput] = useState('');
+  const [plannerLoading, setPlannerLoading] = useState(false);
+  const [plannerError, setPlannerError] = useState('');
   const profilePhotoInputRef = useRef<HTMLInputElement | null>(null);
+  const plannerChatRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (!auth) {
@@ -769,6 +809,16 @@ export default function App() {
 
     void loadLikedDaters(profile);
   }, [currentUser, profile]);
+
+  useEffect(() => {
+    const chatContainer = plannerChatRef.current;
+
+    if (!chatContainer) {
+      return;
+    }
+
+    chatContainer.scrollTop = chatContainer.scrollHeight;
+  }, [plannerMessages, plannerLoading]);
 
   const resetMessages = () => {
     setError('');
@@ -1634,6 +1684,43 @@ export default function App() {
     setMatchedDaters([]);
   };
 
+  const sendPlannerMessage = async (rawPrompt: string) => {
+    const trimmedPrompt = rawPrompt.trim();
+
+    if (!trimmedPrompt || plannerLoading) {
+      return;
+    }
+
+    const nextMessages = [...plannerMessages, { role: 'user' as const, text: trimmedPrompt }];
+    setPlannerMessages(nextMessages);
+    setPlannerInput('');
+    setPlannerError('');
+    setPlannerLoading(true);
+
+    try {
+      const reply = await generatePlannerReply(nextMessages, profile || undefined);
+      setPlannerMessages((current) => [...current, { role: 'assistant', text: reply }]);
+    } catch (plannerRequestError) {
+      setPlannerError(
+        plannerRequestError instanceof Error
+          ? plannerRequestError.message
+          : 'The planner could not respond right now.',
+      );
+    } finally {
+      setPlannerLoading(false);
+    }
+  };
+
+  const handlePlannerSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    await sendPlannerMessage(plannerInput);
+  };
+
+  const handlePlannerPromptClick = async (prompt: string) => {
+    setPlannerInput(prompt);
+    await sendPlannerMessage(prompt);
+  };
+
   const renderFrame = (content: ReactNode) => (
     <main className="app-shell">
       <section className="phone-shell">
@@ -1700,40 +1787,65 @@ export default function App() {
     }
 
     if (activeTab === 'planner') {
+      const plannerPrompts = buildPlannerPrompts(profile);
+
       return (
         <>
           <p className="account-detail">Describe the kind of date you want and get Gainesville-friendly suggestions.</p>
+          {!isGeminiConfigured ? (
+            <p className="planner-helper-text">
+              Add <code>VITE_GEMINI_API_KEY</code> to <code>gator-dater-app/.env</code> to enable the chatbot.
+            </p>
+          ) : null}
 
           <section className="prompt-grid">
-            <button className="prompt-button">
-              <p>Local coffee shops</p>
-              <img src={searchImg} alt="Search" className="Search" />
-            </button>
-            <button className="prompt-button">
-              <p>Date ideas for [insert person here]</p>
-              <img src={searchImg} alt="Search" className="Search" />
-            </button>
-            <button className="prompt-button">
-              <p>Best days for picnic near me</p>
-              <img src={searchImg} alt="Search" className="Search" />
-            </button>
+            {plannerPrompts.map((prompt) => (
+              <button
+                key={prompt.id}
+                className="prompt-button"
+                type="button"
+                onClick={() => void handlePlannerPromptClick(prompt.prompt)}
+                disabled={plannerLoading}
+              >
+                <p>{prompt.label}</p>
+                <img src={searchImg} alt="Search" className="Search" />
+              </button>
+            ))}
           </section>
 
           <section className="chat">
-            <div className="chat-section">
-              <div className="message-from-other">
-                <p>Hello! How can I help you find the perfect date idea?</p>
-              </div>
-              <div className="message-from-user">
-                <p>I'm looking for a fun and casual date idea near campus for this weekend.</p>
-              </div>
+            <div className="chat-section planner-chat-section" ref={plannerChatRef}>
+              {plannerMessages.map((message, index) => (
+                <div
+                  key={`${message.role}-${index}`}
+                  className={message.role === 'assistant' ? 'message-from-other' : 'message-from-user'}
+                >
+                  <p>{message.text}</p>
+                </div>
+              ))}
+              {plannerLoading ? (
+                <div className="message-from-other planner-typing">
+                  <p>Thinking through a few ideas...</p>
+                </div>
+              ) : null}
             </div>
-            <div className="chat-input">
-              <input type="text" placeholder="Ask for date ideas..." />
-              <button className="submit-button" type="button">
+            {plannerError ? <p className="planner-error-text">{plannerError}</p> : null}
+            <form className="chat-input" onSubmit={handlePlannerSubmit}>
+              <input
+                type="text"
+                placeholder="Ask for date ideas..."
+                value={plannerInput}
+                onChange={(event) => setPlannerInput(event.target.value)}
+                disabled={!isGeminiConfigured || plannerLoading}
+              />
+              <button
+                className="submit-button"
+                type="submit"
+                disabled={!isGeminiConfigured || plannerLoading || !plannerInput.trim()}
+              >
                 <img src={submitImg} alt="Send" className="send-icon" />
               </button>
-            </div>
+            </form>
           </section>
         </>
       );
