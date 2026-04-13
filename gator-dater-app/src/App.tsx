@@ -18,7 +18,6 @@ import {
   query,
   serverTimestamp,
   setDoc,
-  where,
 } from 'firebase/firestore';
 import { auth, db, isFirebaseConfigured } from './firebase';
 import gatorImage from '../assets/PLEASE REPLACE.png';
@@ -513,21 +512,6 @@ const isIntentionCompatible = (seekerIntention: string, candidateIntention: stri
 
   return seekerIntention === candidateIntention;
 };
-const passesDealBreakers = (viewer: UserProfile, candidate: UserProfile) => {
-  const candidateFitsViewer =
-    isGenderAllowed(viewer.genderPreference, candidate.gender) &&
-    candidate.age >= viewer.ageRange.min &&
-    candidate.age <= viewer.ageRange.max &&
-    isIntentionCompatible(viewer.intentionOpenTo, candidate.intention);
-
-  const viewerFitsCandidate =
-    isGenderAllowed(candidate.genderPreference, viewer.gender) &&
-    viewer.age >= candidate.ageRange.min &&
-    viewer.age <= candidate.ageRange.max &&
-    isIntentionCompatible(candidate.intentionOpenTo, viewer.intention);
-
-  return candidateFitsViewer && viewerFitsCandidate;
-};
 const labelForIntention = (value: string) =>
   datingIntentionOptions.find((option) => option.value === value)?.label || 'Open to anything';
 const profileToDater = (profileEntry: UserProfile): Dater => {
@@ -750,9 +734,27 @@ export default function App() {
       return;
     }
 
-    void loadDiscoveryFeed(currentUser, profile).catch(() => {
+    void loadDiscoveryFeed(currentUser, profile).catch((loadError: unknown) => {
+      const code =
+        typeof loadError === 'object' &&
+        loadError !== null &&
+        'code' in loadError
+          ? String((loadError as { code?: unknown }).code)
+          : 'unknown';
+      const message =
+        loadError instanceof Error
+          ? loadError.message
+          : 'unknown error';
+
       setDiscoveryFeed(buildSampleDiscoveryFeed(profile));
       setDiscoveryFeedSource('sample');
+      //for firebase accounts info
+      // setDiscoveryDebug(
+      //   `DEBUG discovery: Firestore load failed (code=${code}, message=${message}); showing sample profiles only.`,
+      // );
+      if (isOfflineFirestoreError(loadError)) {
+        setFirestoreHealth('fallback');
+      }
       setSwipeIndex(0);
       setStatus('Using sample daters while the discovery feed loads.');
     });
@@ -1471,7 +1473,6 @@ export default function App() {
 
     const profilesQuery = query(
       collection(db, 'users'),
-      where('onboardingCompleted', '==', true),
       limit(50),
     );
     const snapshot = await getDocs(profilesQuery);
@@ -1497,13 +1498,14 @@ export default function App() {
     if (!db) {
       setDiscoveryFeed(buildSampleDiscoveryFeed(currentProfile));
       setDiscoveryFeedSource('sample');
+      //for firebase accounts info
+      // setDiscoveryDebug('DEBUG discovery: Firestore not configured; showing sample profiles only.');
       setSwipeIndex(0);
       return;
     }
 
     const discoveryQuery = query(
       collection(db, 'users'),
-      where('onboardingCompleted', '==', true),
       limit(100),
     );
 
@@ -1512,16 +1514,15 @@ export default function App() {
     const currentPassedUsers = new Set(currentProfile.passedUsers);
     const currentBlockedUsers = new Set(currentProfile.blockedUsers || []);
 
-    // Stage 1: hard filters (both sides must pass each other's deal-breakers).
-    const remoteCandidates = snapshot.docs
+    const baseRemoteCandidates = snapshot.docs
       .map((profileDoc) => normalizeUserProfile(profileDoc.data() as Partial<UserProfile>, profileDoc.id))
       .filter((candidateProfile) => candidateProfile.uid !== currentUserEntry.uid)
       .filter((candidateProfile) => !currentLikedUsers.has(candidateProfile.uid))
       .filter((candidateProfile) => !currentPassedUsers.has(candidateProfile.uid))
       .filter((candidateProfile) => !candidateProfile.blockedUsers.includes(currentUserEntry.uid))
-      .filter((candidateProfile) => !currentBlockedUsers.has(candidateProfile.uid))
-      .filter((candidateProfile) => passesDealBreakers(currentProfile, candidateProfile))
-      // Stage 2: soft scoring to rank, not hide, compatible candidates.
+      .filter((candidateProfile) => !currentBlockedUsers.has(candidateProfile.uid));
+
+    const remoteCandidates = baseRemoteCandidates
       .map((candidateProfile) => ({
         candidateProfile,
         score: compareProfilesByPreferences(currentProfile, candidateProfile),
@@ -1532,8 +1533,16 @@ export default function App() {
         compatibility: score,
       }));
 
+    const sampleCandidates = buildSampleDiscoveryFeed(currentProfile)
+      .filter((sampleCandidate) => !remoteCandidates.some((remoteCandidate) => remoteCandidate.id === sampleCandidate.id));
+
+    //for firebase accounts info
+    // setDiscoveryDebug(
+    //   `DEBUG discovery: firestoreDocs=${snapshot.docs.length} eligibleFirebase=${baseRemoteCandidates.length} firebaseShown=${remoteCandidates.length} sampleAppended=${sampleCandidates.length} totalFeed=${remoteCandidates.length + sampleCandidates.length}`,
+    // );
+
     if (remoteCandidates.length) {
-      setDiscoveryFeed(remoteCandidates);
+      setDiscoveryFeed([...remoteCandidates, ...sampleCandidates]);
       setDiscoveryFeedSource('firestore');
       setSwipeIndex(0);
       return;
@@ -1541,6 +1550,10 @@ export default function App() {
 
     setDiscoveryFeed(buildSampleDiscoveryFeed(currentProfile));
     setDiscoveryFeedSource('sample');
+    //for firebase accounts info
+    // setDiscoveryDebug(
+    //   `DEBUG discovery: firestoreDocs=${snapshot.docs.length} eligibleFirebase=${baseRemoteCandidates.length} firebaseShown=0; using sample fallback`,
+    // );
     setSwipeIndex(0);
   };
 
@@ -1870,6 +1883,8 @@ export default function App() {
             Like
           </button>
         </div>
+        {/* //for firebase accounts info */}
+        {/* {discoveryDebug ? <p className="account-detail">{discoveryDebug}</p> : null} */}
       </>
     );
   };
