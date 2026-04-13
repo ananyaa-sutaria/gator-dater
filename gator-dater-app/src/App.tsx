@@ -1320,6 +1320,7 @@ export default function App() {
   const handleOpenPreferences = () => {
     setProfileForm((current) => ({
       ...current,
+      bio: profile?.bio || current.bio,
       intention: profile?.preferences.intention || current.intention,
       genderIdentity: profile?.preferences.genderIdentity || current.genderIdentity,
       genderPreference: profile?.preferences.genderPreference || current.genderPreference,
@@ -1400,7 +1401,7 @@ export default function App() {
       name: fullName,
       age: profile?.age || Number(profileForm.age) || 18,
       yearAtUf: profile?.yearAtUf || profileForm.yearAtUf || '',
-      bio: profile?.bio || profileForm.bio || '',
+      bio: profileForm.bio.trim() || profile?.bio || '',
       gender: nextPreferences.genderIdentity,
       genderPreference: nextPreferences.genderPreference,
       intentionOpenTo: nextPreferences.intentionOpenTo,
@@ -1436,6 +1437,7 @@ export default function App() {
             intentionOpenTo: updatedProfile.intentionOpenTo,
             ageRange: updatedProfile.ageRange,
             intention: updatedProfile.intention,
+            bio: updatedProfile.bio,
             interests: updatedProfile.interests,
             dateBudget: updatedProfile.dateBudget,
             dateVibe: updatedProfile.dateVibe,
@@ -2335,6 +2337,19 @@ export default function App() {
                   ))}
                 </select>
               </label>
+              <div>
+                <label style={{ display: 'block', textAlign: 'left' }}>Bio</label>
+                <textarea
+                  className="bio-textarea"
+                  value={profileForm.bio}
+                  onChange={(event) =>
+                    setProfileForm((current) => ({ ...current, bio: event.target.value }))
+                  }
+                  placeholder="Tell people about yourself"
+                  rows={5}
+                  maxLength={220}
+                />
+              </div>
               <div>
                 <label>Describe yourself (Pick up to 3)</label>
                 <div className="hobbies-scroll-list">

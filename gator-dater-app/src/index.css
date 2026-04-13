@@ -291,7 +291,8 @@ button:active {
 }
 
 .auth-form input,
-.auth-form select {
+.auth-form select,
+.auth-form textarea {
   height: 12.7cqw;
   width: 100%;
   padding: 1.4cqh 3.25cqw;
@@ -302,12 +303,14 @@ button:active {
 }
 
 .auth-form input::placeholder,
-.auth-form select::placeholder {
+.auth-form select::placeholder,
+.auth-form textarea::placeholder {
   color: var(--color-lightPink);
 }
 
 .auth-form input:focus,
-.auth-form select:focus {
+.auth-form select:focus,
+.auth-form textarea:focus {
   outline: none;
   border-color: var(--color-darkPink);
 }
@@ -366,6 +369,16 @@ button:active {
 .auth-form .preferences-select {
   height: 12.7cqw;
   line-height: 12.7cqw;
+}
+
+.auth-form .bio-textarea {
+  min-height: 28cqw;
+  height: auto;
+  line-height: 1.25;
+  padding: 1.8cqw 3.25cqw;
+  resize: vertical;
+  font-family: 'Zilla Slab', serif;
+  font-size: 4.1cqw;
 }
 
 .hobbies-scroll-list {
