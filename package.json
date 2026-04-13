@@ -1,9 +1,22 @@
 {
+  "scripts": {
+    "dev": "npm --prefix gator-dater-app run dev",
+    "build": "npm --prefix gator-dater-app run build",
+    "preview": "npm --prefix gator-dater-app run preview"
+  },
   "dependencies": {
     "@react-navigation/native": "^7.1.28",
     "@react-navigation/native-stack": "^7.12.0",
-    "firebase": "^12.9.0",
+    "firebase": "^12.11.0",
+    "node": "^25.9.0",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
     "react-native-safe-area-context": "^5.6.2",
-    "react-native-screens": "^4.23.0"
+    "react-native-screens": "^4.23.0",
+    "tailwind": "^4.0.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/cli": "^4.2.2",
+    "tailwindcss": "^4.2.2"
   }
 }
