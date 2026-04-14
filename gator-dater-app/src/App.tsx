@@ -35,6 +35,9 @@ import dislikeIcon from '../assets/dislikeIcon.png';
 import searchIcon from '../assets/searchIcon.png';
 import submitIcon from '../assets/submitIcon.png';
 import './index.css';
+//calendar stuff
+import 'react-calendar/dist/Calendar.css';
+import Calendar from 'react-calendar';
 
 const gatorImg = gatorImage;
 const heartImg = heartIcon;
@@ -695,6 +698,11 @@ export default function App() {
   const [discoveryFeedSource, setDiscoveryFeedSource] = useState<'sample' | 'firestore'>('sample');
   const [preferencesSection, setPreferencesSection] = useState<'preferences' | 'deal-breakers'>('preferences');
   const profilePhotoInputRef = useRef<HTMLInputElement | null>(null);
+  //hehe calendar
+  type ValuePiece = Date | null;
+  type Value = ValuePiece | [ValuePiece, ValuePiece];
+  const [calendarValue, setCalendarValue] = useState<Value>(new Date());
+  const profilePhotoFileRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     if (!auth) {
@@ -1685,7 +1693,10 @@ export default function App() {
         <>
           <section className="calendar">
             <h2>Calendar</h2>
-            <div className="calendar-grid">
+            
+            <div>
+               {/* className="calendar-grid"> */}
+               <Calendar onChange={setCalendarValue} value={calendarValue}/>
             </div>
           </section>
 

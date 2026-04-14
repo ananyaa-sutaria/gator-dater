@@ -230,6 +230,25 @@ p, label, input {
   background-color: var(--color-green);
 }
 
+/* react-calendar */
+.react-calendar {
+  width: 100%;
+  max-width: 500px;
+  background: white;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  font-family: Arial, sans-serif;
+}
+
+.react-calendar button {
+  font-size: 0.9rem;
+  padding: 8px;
+}
+
+.react-calendar__month-view__days__day--weekend {
+  color: #d10000;
+}
+
 .auth-form,
 .button-stack {
   width: 100%;
