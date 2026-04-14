@@ -1552,20 +1552,44 @@ export default function App() {
   };
 
   const handleContinueFromAllSet = () => {
-    if (currentUser && profile) {
-      void findTopPreferenceMatches(currentUser.uid, profile)
-        .then((matches) => {
-          if (matches.length) {
-            setStatus(`Found ${matches.length} potential matches from profile preferences.`);
-          }
-        })
-        .catch(() => {
-          setStatus('');
-        });
-    }
-
     setScreen('home');
     setActiveTab('swipe');
+
+    if (!currentUser || !profile) {
+      return;
+    }
+
+    const nextProfile = profile.onboardingCompleted
+      ? profile
+      : {
+          ...profile,
+          onboardingCompleted: true,
+        };
+
+    if (!profile.onboardingCompleted) {
+      setProfile(nextProfile);
+      saveLocalProfile(currentUser.uid, nextProfile);
+
+      if (db) {
+        void setDoc(
+          doc(db, 'users', currentUser.uid),
+          { onboardingCompleted: true },
+          { merge: true },
+        ).catch(() => {
+          setFirestoreHealth('fallback');
+        });
+      }
+    }
+
+    void findTopPreferenceMatches(currentUser.uid, nextProfile)
+      .then((matches) => {
+        if (matches.length) {
+          setStatus(`Found ${matches.length} potential matches from profile preferences.`);
+        }
+      })
+      .catch(() => {
+        setStatus('');
+      });
   };
 
   const handleOpenPreferences = () => {
@@ -3190,7 +3214,7 @@ export default function App() {
         <img src={youreAllSetImg} alt="You're All Set!" />
         <img src={gatorImg} className="gator-set" alt="Gator" />
         <div style={{ height: '15cqh' }} />
-        <button className="primary-button" type="button" onClick={handleContinueFromAllSet}>
+        <button className="primary-button all-set-continue" type="button" onClick={handleContinueFromAllSet}>
           Continue
         </button>
       </div>,

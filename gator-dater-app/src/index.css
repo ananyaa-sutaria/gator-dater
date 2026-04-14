@@ -489,6 +489,13 @@ button:active {
   left: 32cqw;
   object-fit: contain;
   opacity: 0.5;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.all-set-continue {
+  position: relative;
+  z-index: 2;
 }
 
 .gator-heart {
