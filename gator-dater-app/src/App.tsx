@@ -10,15 +10,19 @@ import {
   User,
 } from 'firebase/auth';
 import {
+  addDoc,
   collection,
+  deleteField,
   doc,
   getDoc,
   getDocs,
   limit,
+  onSnapshot,
+  orderBy,
   query,
   serverTimestamp,
   setDoc,
-  where,
+  writeBatch,
 } from 'firebase/firestore';
 import { auth, db, isFirebaseConfigured } from './firebase';
 import gatorImage from '../assets/PLEASE REPLACE.png';
@@ -34,6 +38,12 @@ import likeIcon from '../assets/likeIcon.png';
 import dislikeIcon from '../assets/dislikeIcon.png';
 import searchIcon from '../assets/searchIcon.png';
 import submitIcon from '../assets/submitIcon.png';
+import {
+  generatePlannerReply,
+  isGeminiConfigured,
+  type PlannerChatMessage,
+  type PlannerDateOption,
+} from './gemini';
 import './index.css';
 //calendar stuff
 import 'react-calendar/dist/Calendar.css';
@@ -72,6 +82,44 @@ type Dater = {
   bio: string;
   compatibility: number;
   vibe: string;
+  interests: string[];
+  dateBudget: string;
+  dateVibe: string[];
+  availability: string[];
+  photoUrl: string;
+};
+
+type ChatConversation = {
+  chatId: string;
+  matchId: string;
+  matchName: string;
+  matchPhotoUrl: string;
+  preview: string;
+  unread: boolean;
+};
+
+type ChatMessage = {
+  id: string;
+  senderId: string;
+  senderName: string;
+  text: string;
+  sentAt: number;
+  status?: 'pending' | 'sent' | 'failed';
+};
+
+type PlannerPrompt = {
+  id: string;
+  label: string;
+  prompt: string;
+};
+
+type CalendarPlan = {
+  id: string;
+  title: string;
+  place: string;
+  description: string;
+  matchName: string;
+  date: string;
 };
 
 type SignUpState = {
@@ -153,6 +201,7 @@ type UserProfile = {
   passedUsers: string[];
   matches: string[];
   blockedUsers: string[];
+  conversations?: Record<string, string>;
   onboardingCompleted: boolean;
   createdAt?: unknown;
 };
@@ -268,12 +317,13 @@ const interestOptions = [
   'Travel',
   'Volunteering',
 ];
+
 const sampleDiscoveryProfiles: Array<Partial<UserProfile> & { uid: string }> = [
   {
     uid: 'sample-leah',
     firstName: 'Leah',
-    lastName: 'R',
-    fullName: 'Leah R',
+    lastName: 'Sample',
+    fullName: 'Leah Sample',
     age: 21,
     yearAtUf: 'Junior',
     bio: 'Quiet reader who loves coffee shop hangs and movie nights.',
@@ -298,10 +348,10 @@ const sampleDiscoveryProfiles: Array<Partial<UserProfile> & { uid: string }> = [
     },
   },
   {
-    uid: 'sample-ava',
+    uid: 'sample-ethan',
     firstName: 'Ethan',
-    lastName: 'M',
-    fullName: 'Ethan M',
+    lastName: 'Sample',
+    fullName: 'Ethan Sample',
     age: 20,
     yearAtUf: 'Sophomore',
     bio: 'Outgoing and social, always down to try a new spot in town.',
@@ -328,8 +378,8 @@ const sampleDiscoveryProfiles: Array<Partial<UserProfile> & { uid: string }> = [
   {
     uid: 'sample-jordan',
     firstName: 'Jordan',
-    lastName: 'T',
-    fullName: 'Jordan T',
+    lastName: 'Sample',
+    fullName: 'Jordan Sample',
     age: 22,
     yearAtUf: 'Senior',
     bio: 'Gym regular who likes active first dates and football weekends.',
@@ -356,8 +406,8 @@ const sampleDiscoveryProfiles: Array<Partial<UserProfile> & { uid: string }> = [
   {
     uid: 'sample-dylan',
     firstName: 'Dylan',
-    lastName: 'Cruz',
-    fullName: 'Dylan Cruz',
+    lastName: 'Sample',
+    fullName: 'Dylan Sample',
     age: 21,
     yearAtUf: 'Junior',
     bio: 'Low-key gamer and foodie who likes good playlists and better conversation.',
@@ -382,10 +432,10 @@ const sampleDiscoveryProfiles: Array<Partial<UserProfile> & { uid: string }> = [
     },
   },
   {
-    uid: 'sample-maya',
+    uid: 'sample-noah',
     firstName: 'Noah',
-    lastName: 'S',
-    fullName: 'Noah S',
+    lastName: 'Sample',
+    fullName: 'Noah Sample',
     age: 21,
     yearAtUf: 'Junior',
     bio: 'Creative and thoughtful, happiest with art, film, and chill weekends.',
@@ -412,8 +462,8 @@ const sampleDiscoveryProfiles: Array<Partial<UserProfile> & { uid: string }> = [
   {
     uid: 'sample-nina',
     firstName: 'Nina',
-    lastName: 'K',
-    fullName: 'Nina K',
+    lastName: 'Sample',
+    fullName: 'Nina Sample',
     age: 19,
     yearAtUf: 'Freshman',
     bio: 'Friendly and easygoing, into coffee runs, trivia nights, and games.',
@@ -438,10 +488,10 @@ const sampleDiscoveryProfiles: Array<Partial<UserProfile> & { uid: string }> = [
     },
   },
   {
-    uid: 'sample-sophia',
+    uid: 'sample-liam',
     firstName: 'Liam',
-    lastName: 'L',
-    fullName: 'Liam L',
+    lastName: 'Sample',
+    fullName: 'Liam Sample',
     age: 23,
     yearAtUf: 'Graduate',
     bio: 'Planner with foodie energy who enjoys weekend adventures and live music.',
@@ -519,21 +569,6 @@ const isIntentionCompatible = (seekerIntention: string, candidateIntention: stri
 
   return seekerIntention === candidateIntention;
 };
-const passesDealBreakers = (viewer: UserProfile, candidate: UserProfile) => {
-  const candidateFitsViewer =
-    isGenderAllowed(viewer.genderPreference, candidate.gender) &&
-    candidate.age >= viewer.ageRange.min &&
-    candidate.age <= viewer.ageRange.max &&
-    isIntentionCompatible(viewer.intentionOpenTo, candidate.intention);
-
-  const viewerFitsCandidate =
-    isGenderAllowed(candidate.genderPreference, viewer.gender) &&
-    viewer.age >= candidate.ageRange.min &&
-    viewer.age <= candidate.ageRange.max &&
-    isIntentionCompatible(candidate.intentionOpenTo, viewer.intention);
-
-  return candidateFitsViewer && viewerFitsCandidate;
-};
 const labelForIntention = (value: string) =>
   datingIntentionOptions.find((option) => option.value === value)?.label || 'Open to anything';
 const profileToDater = (profileEntry: UserProfile): Dater => {
@@ -559,6 +594,11 @@ const profileToDater = (profileEntry: UserProfile): Dater => {
       'New connection at UF',
     compatibility: 0,
     vibe: topVibe,
+    interests: profileEntry.interests,
+    dateBudget: profileEntry.dateBudget,
+    dateVibe: profileEntry.dateVibe,
+    availability: profileEntry.availability,
+    photoUrl: profileEntry.photoUrl || '',
   };
 };
 const normalizePreferences = (preferences: Partial<Preferences> | undefined): Preferences => ({
@@ -618,6 +658,9 @@ const normalizeUserProfile = (rawProfile: Partial<UserProfile>, uid: string): Us
     passedUsers: Array.isArray(rawProfile.passedUsers) ? rawProfile.passedUsers : [],
     matches: Array.isArray(rawProfile.matches) ? rawProfile.matches : [],
     blockedUsers: Array.isArray(rawProfile.blockedUsers) ? rawProfile.blockedUsers : [],
+    conversations: rawProfile.conversations && typeof rawProfile.conversations === 'object'
+      ? (rawProfile.conversations as Record<string, string>)
+      : {},
     onboardingCompleted: rawProfile.onboardingCompleted ?? false,
     createdAt: rawProfile.createdAt,
   };
@@ -675,6 +718,227 @@ const isOfflineFirestoreError = (value: unknown) =>
     value.message.toLowerCase().includes('offline') ||
     value.message.toLowerCase().includes('unavailable'));
 const getProfileStorageKey = (uid: string) => `gator-dater-profile:${uid}`;
+const buildFirestoreUserProfile = (nextProfile: UserProfile) => ({
+  uid: nextProfile.uid,
+  firstName: nextProfile.firstName,
+  lastName: nextProfile.lastName,
+  fullName: nextProfile.fullName,
+  name: nextProfile.name,
+  age: nextProfile.age,
+  yearAtUf: nextProfile.yearAtUf,
+  bio: nextProfile.bio,
+  email: nextProfile.email,
+  photoUrl: nextProfile.photoUrl,
+  preferences: nextProfile.preferences,
+  likedUsers: nextProfile.likedUsers,
+  passedUsers: nextProfile.passedUsers,
+  matches: nextProfile.matches,
+  blockedUsers: nextProfile.blockedUsers,
+  conversations: nextProfile.conversations || {},
+  onboardingCompleted: nextProfile.onboardingCompleted,
+  createdAt: nextProfile.createdAt || serverTimestamp(),
+  gender: deleteField(),
+  genderPreference: deleteField(),
+  intentionOpenTo: deleteField(),
+  ageRange: deleteField(),
+  intention: deleteField(),
+  interests: deleteField(),
+  dateBudget: deleteField(),
+  dateVibe: deleteField(),
+  distance: deleteField(),
+  availability: deleteField(),
+});
+const getChatStorageKey = (leftUserId: string, rightUserId: string) =>
+  `gator-dater-chat:${[leftUserId, rightUserId].sort().join('__')}`;
+const getConversationId = (leftUserId: string, rightUserId: string) => {
+  // console.log('uid1 raw:', JSON.stringify(leftUserId));
+  // console.log('uid2 raw:', JSON.stringify(rightUserId));
+  // console.log('uid1 length:', leftUserId.length);
+  // console.log('uid2 length:', rightUserId.length);
+
+  return [leftUserId, rightUserId].sort().join('_');
+};
+const getConversationParticipantIds = (leftUserId: string, rightUserId: string) =>
+  [leftUserId, rightUserId].sort();
+const mergeChatMessages = (primary: ChatMessage[], secondary: ChatMessage[]) => {
+  const mergedMessages = new Map<string, ChatMessage>();
+
+  [...primary, ...secondary].forEach((message) => {
+    mergedMessages.set(message.id, message);
+  });
+
+  return Array.from(mergedMessages.values()).sort((leftMessage, rightMessage) => {
+    if (leftMessage.sentAt === rightMessage.sentAt) {
+      return leftMessage.id.localeCompare(rightMessage.id);
+    }
+
+    return leftMessage.sentAt - rightMessage.sentAt;
+  });
+};
+const loadLocalChatMessages = (leftUserId: string, rightUserId: string): ChatMessage[] => {
+  if (typeof window === 'undefined') {
+    return [] as ChatMessage[];
+  }
+
+  try {
+    const storedMessages = window.localStorage.getItem(getChatStorageKey(leftUserId, rightUserId));
+
+    if (!storedMessages) {
+      return [];
+    }
+
+    const parsedMessages = JSON.parse(storedMessages) as Array<Partial<ChatMessage> & { status?: unknown }>;
+
+    return parsedMessages
+      .map((message): ChatMessage => ({
+        id: String(message.id || ''),
+        senderId: String(message.senderId || ''),
+        senderName: String(message.senderName || ''),
+        text: String(message.text || ''),
+        sentAt: Number(message.sentAt || 0),
+        status: ((message.status === 'pending' || message.status === 'failed')
+          ? message.status
+          : 'sent') as ChatMessage['status'],
+      }))
+      .filter((message) => Boolean(message.id) && Boolean(message.senderId) && Boolean(message.text));
+  } catch {
+    return [];
+  }
+};
+const saveLocalChatMessages = (leftUserId: string, rightUserId: string, messages: ChatMessage[]) => {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  window.localStorage.setItem(getChatStorageKey(leftUserId, rightUserId), JSON.stringify(messages));
+};
+const buildConversationPayload = (leftUserId: string, rightUserId: string) => ({
+  participants: [leftUserId, rightUserId],
+  createdAt: serverTimestamp(),
+  lastMessage: '',
+  lastMessageAt: serverTimestamp(),
+});
+const formatChatTime = (timestamp: number) => {
+  if (!timestamp) {
+    return '';
+  }
+
+  return new Date(timestamp).toLocaleTimeString([], {
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+};
+
+const plannerGreeting =
+  'Tell me the kind of date you want, and I will suggest a few Gainesville-friendly ideas.';
+
+const buildPlannerPrompts = (profile: UserProfile | null, selectedMatch: Dater | null): PlannerPrompt[] => {
+  const interestPair = profile?.interests?.slice(0, 2).join(' and ');
+  const matchName = selectedMatch?.name?.split(' ')[0] || 'my match';
+  const sharedInterestSummary =
+    profile?.interests
+      ?.filter((interest) => selectedMatch?.interests.includes(interest))
+      .slice(0, 2)
+      .join(' and ') || '';
+
+  return [
+    {
+      id: 'coffee',
+      label: 'Low-key first date',
+      prompt: `Plan a casual first date near campus with ${matchName}, including coffee or dessert and a simple conversation-friendly activity.`,
+    },
+    {
+      id: 'budget',
+      label: 'Budget-friendly night',
+      prompt: `Give me 3 affordable Gainesville date ideas for ${matchName} this week that feel thoughtful, not boring.`,
+    },
+    {
+      id: 'outdoors',
+      label: 'Outside plan',
+      prompt: `Suggest an outdoor date in Gainesville for ${matchName}, with a backup option in case it rains.`,
+    },
+    {
+      id: 'personalized',
+      label: 'Match my vibe',
+      prompt: sharedInterestSummary
+        ? `Plan a Gainesville date for me and ${matchName} built around our shared interest in ${sharedInterestSummary}, with a realistic student budget and an easy first message to send.`
+        : interestPair
+          ? `Plan a Gainesville date that fits me and ${matchName}, especially if we would enjoy ${interestPair}, with a realistic student budget and an easy first message to send.`
+          : `Plan a Gainesville date idea for me and ${matchName} that feels fun, safe, and easy for two UF students to say yes to.`,
+    },
+  ];
+};
+
+const buildPlannerGreeting = (selectedMatch: Dater | null) =>
+  selectedMatch
+    ? `Tell me what kind of date you want with ${selectedMatch.name}, and I will suggest Gainesville-friendly ideas based on both of your preferences.`
+    : plannerGreeting;
+
+const describeMatchForPlanner = (selectedMatch: Dater | null) => {
+  if (!selectedMatch) {
+    return 'No specific match selected yet. Give broad Gainesville date ideas until the user picks a match.';
+  }
+
+  return [
+    `Selected match: ${selectedMatch.name}`,
+    `Year at UF: ${selectedMatch.yearAtUf}`,
+    `Bio: ${selectedMatch.bio}`,
+    `Top vibe: ${selectedMatch.vibe}`,
+    selectedMatch.interests.length ? `Interests: ${selectedMatch.interests.join(', ')}` : '',
+    selectedMatch.dateVibe.length ? `Preferred date vibes: ${selectedMatch.dateVibe.join(', ')}` : '',
+    selectedMatch.availability.length ? `Availability: ${selectedMatch.availability.join(', ')}` : '',
+    selectedMatch.dateBudget ? `Budget comfort: ${selectedMatch.dateBudget}` : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
+};
+
+const buildPlannerRequest = (
+  userPrompt: string,
+  currentProfile: UserProfile | null,
+  selectedMatch: Dater | null,
+) => {
+  const sharedInterests = currentProfile?.interests.filter((interest) =>
+    selectedMatch?.interests.includes(interest),
+  ) || [];
+  const sharedVibes = currentProfile?.dateVibe.filter((vibe) =>
+    selectedMatch?.dateVibe.includes(vibe),
+  ) || [];
+
+  return [
+    'Plan this date using the match details below.',
+    describeMatchForPlanner(selectedMatch),
+    currentProfile
+      ? `Current user preferences:\n${[
+        currentProfile.interests.length ? `Interests: ${currentProfile.interests.join(', ')}` : '',
+        currentProfile.dateVibe.length ? `Preferred date vibes: ${currentProfile.dateVibe.join(', ')}` : '',
+        currentProfile.availability.length ? `Availability: ${currentProfile.availability.join(', ')}` : '',
+        currentProfile.dateBudget ? `Budget comfort: ${currentProfile.dateBudget}` : '',
+      ]
+        .filter(Boolean)
+        .join('\n')}`
+      : '',
+    sharedInterests.length ? `Shared interests: ${sharedInterests.join(', ')}` : 'Shared interests: not obvious yet',
+    sharedVibes.length ? `Shared date vibes: ${sharedVibes.join(', ')}` : 'Shared date vibes: not obvious yet',
+    selectedMatch
+      ? `Please make the plan feel specifically compatible with ${selectedMatch.name}, and mention why the suggestion fits both people.`
+      : 'Please keep the suggestions broad until a match is selected.',
+    `User request: ${userPrompt}`,
+  ]
+    .filter(Boolean)
+    .join('\n\n');
+};
+
+const formatCalendarDateValue = (date: Date) => date.toISOString().split('T')[0];
+const isSingleCalendarDate = (value: Date | null | [Date | null, Date | null]): value is Date =>
+  value instanceof Date;
+const isSameCalendarDay = (left: string, right: string) => left === right;
+const formatCalendarEntryLabel = (date: string) =>
+  new Date(`${date}T12:00:00`).toLocaleDateString([], {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+  });
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>('intro');
@@ -694,9 +958,28 @@ export default function App() {
   const [likesModalOpen, setLikesModalOpen] = useState(false);
   const [matchesModalOpen, setMatchesModalOpen] = useState(false);
   const [matchedDaters, setMatchedDaters] = useState<Dater[]>([]);
+  const [selectedMatchId, setSelectedMatchId] = useState('');
+  const [chatDraft, setChatDraft] = useState('');
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatError, setChatError] = useState('');
+  const [conversationReadBy, setConversationReadBy] = useState<Record<string, number>>({});
   const [discoveryFeed, setDiscoveryFeed] = useState<Dater[]>(() => buildSampleDiscoveryFeed());
   const [discoveryFeedSource, setDiscoveryFeedSource] = useState<'sample' | 'firestore'>('sample');
   const [preferencesSection, setPreferencesSection] = useState<'preferences' | 'deal-breakers'>('preferences');
+  const [plannerMessages, setPlannerMessages] = useState<PlannerChatMessage[]>([
+    { role: 'assistant', text: plannerGreeting },
+  ]);
+  const [plannerInput, setPlannerInput] = useState('');
+  const [plannerLoading, setPlannerLoading] = useState(false);
+  const [plannerError, setPlannerError] = useState('');
+  const [selectedPlannerMatchId, setSelectedPlannerMatchId] = useState('');
+  const [calendarPlans, setCalendarPlans] = useState<CalendarPlan[]>([]);
+  const [pendingCalendarSave, setPendingCalendarSave] = useState<{
+    messageIndex: number;
+    optionIndex: number;
+    date: string;
+  } | null>(null);
+  const plannerChatRef = useRef<HTMLDivElement | null>(null);
   const profilePhotoInputRef = useRef<HTMLInputElement | null>(null);
   //hehe calendar
   type ValuePiece = Date | null;
@@ -744,6 +1027,28 @@ export default function App() {
         }
 
         setProfile(nextProfile);
+        setProfileForm((current) => ({
+          ...current,
+          firstName: nextProfile.firstName || current.firstName,
+          lastName: nextProfile.lastName || current.lastName,
+          age: String(nextProfile.age || current.age),
+          yearAtUf: nextProfile.yearAtUf || current.yearAtUf,
+          bio: nextProfile.bio || current.bio,
+          photoUrl: nextProfile.photoUrl || user.photoURL || current.photoUrl,
+          intention: nextProfile.preferences.intention || current.intention,
+          genderIdentity: nextProfile.preferences.genderIdentity || current.genderIdentity,
+          genderPreference: nextProfile.preferences.genderPreference || current.genderPreference,
+          intentionOpenTo: nextProfile.preferences.intentionOpenTo || current.intentionOpenTo,
+          ageRangeMin: String(nextProfile.preferences.ageRange.min || current.ageRangeMin),
+          ageRangeMax: String(nextProfile.preferences.ageRange.max || current.ageRangeMax),
+          vibeWords: nextProfile.preferences.vibeWords || current.vibeWords,
+          socialEnergy: nextProfile.preferences.socialEnergy ?? current.socialEnergy,
+          dateBudget: nextProfile.preferences.dateBudget || current.dateBudget,
+          dateVibe: nextProfile.preferences.dateVibe || current.dateVibe,
+          distance: nextProfile.preferences.distance || current.distance,
+          availability: nextProfile.preferences.availability || current.availability,
+          interests: nextProfile.preferences.interests || current.interests,
+        }));
         setScreen(nextProfile.onboardingCompleted ? 'home' : 'profile');
       } catch (loadError) {
         setProfile(null);
@@ -761,9 +1066,27 @@ export default function App() {
       return;
     }
 
-    void loadDiscoveryFeed(currentUser, profile).catch(() => {
+    void loadDiscoveryFeed(currentUser, profile).catch((loadError: unknown) => {
+      const code =
+        typeof loadError === 'object' &&
+          loadError !== null &&
+          'code' in loadError
+          ? String((loadError as { code?: unknown }).code)
+          : 'unknown';
+      const message =
+        loadError instanceof Error
+          ? loadError.message
+          : 'unknown error';
+
       setDiscoveryFeed(buildSampleDiscoveryFeed(profile));
       setDiscoveryFeedSource('sample');
+      //for firebase accounts info
+      // setDiscoveryDebug(
+      //   `DEBUG discovery: Firestore load failed (code=${code}, message=${message}); showing sample profiles only.`,
+      // );
+      if (isOfflineFirestoreError(loadError)) {
+        setFirestoreHealth('fallback');
+      }
       setSwipeIndex(0);
       setStatus('Using sample daters while the discovery feed loads.');
     });
@@ -778,9 +1101,259 @@ export default function App() {
     void loadLikedDaters(profile);
   }, [currentUser, profile]);
 
+  useEffect(() => {
+    if (!currentUser || !profile) {
+      setMatchedDaters([]);
+      return;
+    }
+
+    void loadMatchedDaters();
+  }, [currentUser, profile]);
+
+  useEffect(() => {
+    if (!matchedDaters.length) {
+      setSelectedMatchId('');
+      return;
+    }
+
+    setSelectedMatchId((currentSelected) =>
+      currentSelected && matchedDaters.some((dater) => dater.id === currentSelected)
+        ? currentSelected
+        : '',
+    );
+  }, [matchedDaters]);
+
+  useEffect(() => {
+    if (!matchedDaters.length) {
+      setSelectedPlannerMatchId('');
+      return;
+    }
+
+    setSelectedPlannerMatchId((currentSelected) => {
+      if (currentSelected && matchedDaters.some((dater) => dater.id === currentSelected)) {
+        return currentSelected;
+      }
+
+      if (selectedMatchId && matchedDaters.some((dater) => dater.id === selectedMatchId)) {
+        return selectedMatchId;
+      }
+
+      return matchedDaters[0]?.id || '';
+    });
+  }, [matchedDaters, selectedMatchId]);
+
+  useEffect(() => {
+    if (!db || !currentUser || !selectedMatchId) {
+      setChatMessages([]);
+      setConversationReadBy({});
+      return;
+    }
+
+    let unsubscribeMessages = () => { };
+    let unsubscribeConversation = () => { };
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        if (cancelled) {
+          return;
+        }
+
+        const conversationId = getConversationId(currentUser.uid, selectedMatchId);
+        const conversationRef = doc(db, 'conversations', conversationId);
+        const conversationSnap = await getDoc(conversationRef);
+
+        if (!conversationSnap.exists()) {
+          setChatMessages([]);
+          setConversationReadBy({});
+          return;
+        }
+
+        const messagesQuery = query(
+          collection(db, 'conversations', conversationId, 'messages'),
+          orderBy('sentAt', 'asc'),
+          limit(200),
+        );
+
+        unsubscribeMessages = onSnapshot(
+          messagesQuery,
+          (snapshot) => {
+            const nextMessages = snapshot.docs.map((snapshotDoc): ChatMessage => ({
+              id: snapshotDoc.id,
+              senderId: String(snapshotDoc.data().senderId || ''),
+              senderName: String(snapshotDoc.data().senderName || ''),
+              text: String(snapshotDoc.data().text || ''),
+              sentAt: Number(snapshotDoc.data().sentAt || 0),
+              status: 'sent',
+            }));
+
+            setChatMessages((current) => mergeChatMessages(current, nextMessages));
+          },
+          () => {
+            setChatMessages([]);
+          },
+        );
+
+        unsubscribeConversation = onSnapshot(
+          conversationRef,
+          (snapshot) => {
+            const readByRaw = snapshot.data()?.lastReadAtBy;
+
+            if (!readByRaw || typeof readByRaw !== 'object') {
+              setConversationReadBy({});
+              return;
+            }
+
+            const normalizedReadBy = Object.entries(readByRaw as Record<string, unknown>).reduce<Record<string, number>>(
+              (accumulator, [uid, value]) => {
+                const numericValue = Number(value);
+
+                if (!Number.isNaN(numericValue) && numericValue > 0) {
+                  accumulator[uid] = numericValue;
+                }
+
+                return accumulator;
+              },
+              {},
+            );
+
+            setConversationReadBy(normalizedReadBy);
+          },
+          () => {
+            setConversationReadBy({});
+          },
+        );
+      } catch {
+        if (!cancelled) {
+          setChatMessages([]);
+          setConversationReadBy({});
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      unsubscribeMessages();
+      unsubscribeConversation();
+    };
+  }, [currentUser, selectedMatchId]);
+
+  useEffect(() => {
+    if (!plannerChatRef.current) {
+      return;
+    }
+
+    plannerChatRef.current.scrollTop = plannerChatRef.current.scrollHeight;
+  }, [plannerMessages, plannerLoading]);
+
+  useEffect(() => {
+    const selectedPlannerMatch =
+      matchedDaters.find((dater) => dater.id === selectedPlannerMatchId) || null;
+
+    setPlannerMessages([{ role: 'assistant', text: buildPlannerGreeting(selectedPlannerMatch) }]);
+    setPlannerInput('');
+    setPlannerError('');
+    setPendingCalendarSave(null);
+  }, [matchedDaters, selectedPlannerMatchId]);
+
   const resetMessages = () => {
     setError('');
     setStatus('');
+  };
+
+  const submitPlannerPrompt = async (messageText: string) => {
+    const trimmedMessage = messageText.trim();
+    const selectedPlannerMatch =
+      matchedDaters.find((dater) => dater.id === selectedPlannerMatchId) || null;
+
+    if (!trimmedMessage) {
+      return;
+    }
+
+    if (!isGeminiConfigured) {
+      setPlannerError('Add VITE_GEMINI_API_KEY to gator-dater-app/.env to enable the chatbot.');
+      return;
+    }
+
+    const nextMessages: PlannerChatMessage[] = [
+      ...plannerMessages,
+      { role: 'user', text: trimmedMessage },
+    ];
+
+    setPlannerInput('');
+    setPlannerError('');
+    setPlannerLoading(true);
+    setPlannerMessages(nextMessages);
+
+    try {
+      const plannerMessagesWithContext: PlannerChatMessage[] = [
+        ...plannerMessages,
+        {
+          role: 'user',
+          text: buildPlannerRequest(trimmedMessage, profile, selectedPlannerMatch),
+        },
+      ];
+      const reply = await generatePlannerReply(plannerMessagesWithContext, profile || undefined);
+
+      setPlannerMessages([
+        ...nextMessages,
+        { role: 'assistant', text: reply.intro, dateOptions: reply.dateOptions },
+      ]);
+    } catch (plannerReplyError) {
+      setPlannerError(
+        plannerReplyError instanceof Error
+          ? plannerReplyError.message
+          : 'The planner could not respond right now.',
+      );
+    } finally {
+      setPlannerLoading(false);
+    }
+  };
+
+  const handlePlannerPromptClick = async (prompt: string) => {
+    await submitPlannerPrompt(prompt);
+  };
+
+  const handlePlannerSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    await submitPlannerPrompt(plannerInput);
+  };
+
+  const handleStartCalendarSave = (messageIndex: number, optionIndex: number) => {
+    const selectedDate = isSingleCalendarDate(calendarValue) ? calendarValue : new Date();
+
+    setPendingCalendarSave({
+      messageIndex,
+      optionIndex,
+      date: formatCalendarDateValue(selectedDate),
+    });
+  };
+
+  const handleConfirmCalendarSave = (
+    option: PlannerDateOption,
+    matchName: string,
+  ) => {
+    if (!pendingCalendarSave?.date) {
+      return;
+    }
+
+    const nextPlan: CalendarPlan = {
+      id: `${option.title}-${pendingCalendarSave.date}`,
+      title: option.title,
+      place: option.place,
+      description: option.description,
+      matchName,
+      date: pendingCalendarSave.date,
+    };
+
+    setCalendarPlans((current) => {
+      const withoutDuplicate = current.filter((plan) => plan.id !== nextPlan.id);
+      return [...withoutDuplicate, nextPlan].sort((left, right) => left.date.localeCompare(right.date));
+    });
+    setCalendarValue(new Date(`${pendingCalendarSave.date}T12:00:00`));
+    setPendingCalendarSave(null);
+    setActiveTab('calendar');
+    setStatus(`Added "${option.title}" to your calendar.`);
   };
 
   const getLocalProfile = (uid: string) => {
@@ -805,6 +1378,49 @@ export default function App() {
       JSON.stringify(nextProfile),
     );
   };
+
+  const readPhotoFile = (file: File) =>
+    new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+
+      reader.onload = () => {
+        const result = reader.result;
+
+        if (typeof result !== 'string') {
+          reject(new Error('Unable to read the selected photo.'));
+          return;
+        }
+
+        const image = new Image();
+
+        image.onload = () => {
+          const maxDimension = 512;
+          const scale = Math.min(1, maxDimension / Math.max(image.width, image.height));
+          const width = Math.max(1, Math.round(image.width * scale));
+          const height = Math.max(1, Math.round(image.height * scale));
+          const canvas = document.createElement('canvas');
+          const context = canvas.getContext('2d');
+
+          if (!context) {
+            resolve(result);
+            return;
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          context.drawImage(image, 0, 0, width, height);
+
+          const compressedResult = canvas.toDataURL('image/jpeg', 0.82);
+          resolve(compressedResult.length < result.length ? compressedResult : result);
+        };
+
+        image.onerror = () => resolve(result);
+        image.src = result;
+      };
+
+      reader.onerror = () => reject(new Error('Unable to read the selected photo.'));
+      reader.readAsDataURL(file);
+    });
 
   const saveProfilePhoto = async (photoUrl: string) => {
     if (!currentUser || !currentUser.email) {
@@ -877,13 +1493,17 @@ export default function App() {
 
     try {
       if (db) {
-        await setDoc(doc(db, 'users', currentUser.uid), updatedProfile, { merge: true });
+        await setDoc(doc(db, 'users', currentUser.uid), buildFirestoreUserProfile(updatedProfile), { merge: true });
         setFirestoreHealth('connected');
       }
 
       await updateProfile(currentUser, {
         displayName: updatedProfile.fullName,
+        photoURL: photoUrl,
       });
+
+      await reload(currentUser);
+      setCurrentUser(auth?.currentUser || currentUser);
 
       setStatus('Profile photo updated.');
     } catch (photoError) {
@@ -901,31 +1521,29 @@ export default function App() {
     }
   };
 
-  const handlePhotoChange = (event: ChangeEvent<HTMLInputElement>) => {
+  const handlePhotoChange = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
 
     if (!file) {
       return;
     }
+    event.target.value = '';
 
-    const reader = new FileReader();
-
-    reader.onload = () => {
-      const result = reader.result;
-
-      if (typeof result !== 'string') {
-        return;
-      }
+    try {
+      const result = await readPhotoFile(file);
 
       setProfileForm((current) => ({
         ...current,
         photoUrl: result,
       }));
       setStatus('Photo selected.');
-    };
-
-    reader.readAsDataURL(file);
-    event.target.value = '';
+    } catch (photoError) {
+      setError(
+        photoError instanceof Error
+          ? photoError.message
+          : 'Unable to process the selected photo.',
+      );
+    }
   };
 
   const handleProfilePhotoUpdate = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -934,20 +1552,18 @@ export default function App() {
     if (!file || !currentUser || !currentUser.email) {
       return;
     }
-    const reader = new FileReader();
-
-    reader.onload = async () => {
-      const result = reader.result;
-
-      if (typeof result !== 'string') {
-        return;
-      }
-
-      await saveProfilePhoto(result);
-    };
-
-    reader.readAsDataURL(file);
     event.target.value = '';
+
+    try {
+      const result = await readPhotoFile(file);
+      await saveProfilePhoto(result);
+    } catch (photoError) {
+      setError(
+        photoError instanceof Error
+          ? photoError.message
+          : 'Unable to process the selected photo.',
+      );
+    }
   };
 
   const loadUserProfile = async (user: User) => {
@@ -986,6 +1602,9 @@ export default function App() {
       throw loadError;
     }
   };
+
+  const activeProfilePhoto =
+    profileForm.photoUrl || profile?.photoUrl || currentUser?.photoURL || '';
 
   const handleBack = () => {
     resetMessages();
@@ -1229,7 +1848,7 @@ export default function App() {
 
       saveLocalProfile(currentUser.uid, nextProfile);
 
-      await setDoc(doc(db, 'users', currentUser.uid), nextProfile, { merge: true });
+      await setDoc(doc(db, 'users', currentUser.uid), buildFirestoreUserProfile(nextProfile), { merge: true });
       setFirestoreHealth('connected');
       await updateProfile(currentUser, {
         displayName: nextProfile.fullName,
@@ -1326,6 +1945,7 @@ export default function App() {
   const handleOpenPreferences = () => {
     setProfileForm((current) => ({
       ...current,
+      bio: profile?.bio || current.bio,
       intention: profile?.preferences.intention || current.intention,
       genderIdentity: profile?.preferences.genderIdentity || current.genderIdentity,
       genderPreference: profile?.preferences.genderPreference || current.genderPreference,
@@ -1406,7 +2026,7 @@ export default function App() {
       name: fullName,
       age: profile?.age || Number(profileForm.age) || 18,
       yearAtUf: profile?.yearAtUf || profileForm.yearAtUf || '',
-      bio: profile?.bio || profileForm.bio || '',
+      bio: profileForm.bio.trim() || profile?.bio || '',
       gender: nextPreferences.genderIdentity,
       genderPreference: nextPreferences.genderPreference,
       intentionOpenTo: nextPreferences.intentionOpenTo,
@@ -1418,7 +2038,7 @@ export default function App() {
       distance: nextPreferences.distance,
       availability: nextPreferences.availability,
       email: currentUser.email,
-      photoUrl: profile?.photoUrl || profileForm.photoUrl || '',
+      photoUrl: profileForm.photoUrl || profile?.photoUrl || '',
       preferences: nextPreferences,
       likedUsers: profile?.likedUsers || [],
       passedUsers: profile?.passedUsers || [],
@@ -1433,23 +2053,7 @@ export default function App() {
 
     try {
       if (db) {
-        await setDoc(
-          doc(db, 'users', currentUser.uid),
-          {
-            preferences: nextPreferences,
-            gender: updatedProfile.gender,
-            genderPreference: updatedProfile.genderPreference,
-            intentionOpenTo: updatedProfile.intentionOpenTo,
-            ageRange: updatedProfile.ageRange,
-            intention: updatedProfile.intention,
-            interests: updatedProfile.interests,
-            dateBudget: updatedProfile.dateBudget,
-            dateVibe: updatedProfile.dateVibe,
-            distance: updatedProfile.distance,
-            availability: updatedProfile.availability,
-          },
-          { merge: true },
-        );
+        await setDoc(doc(db, 'users', currentUser.uid), buildFirestoreUserProfile(updatedProfile), { merge: true });
         setFirestoreHealth('connected');
       }
 
@@ -1482,7 +2086,6 @@ export default function App() {
 
     const profilesQuery = query(
       collection(db, 'users'),
-      where('onboardingCompleted', '==', true),
       limit(50),
     );
     const snapshot = await getDocs(profilesQuery);
@@ -1508,13 +2111,14 @@ export default function App() {
     if (!db) {
       setDiscoveryFeed(buildSampleDiscoveryFeed(currentProfile));
       setDiscoveryFeedSource('sample');
+      //for firebase accounts info
+      // setDiscoveryDebug('DEBUG discovery: Firestore not configured; showing sample profiles only.');
       setSwipeIndex(0);
       return;
     }
 
     const discoveryQuery = query(
       collection(db, 'users'),
-      where('onboardingCompleted', '==', true),
       limit(100),
     );
 
@@ -1523,16 +2127,15 @@ export default function App() {
     const currentPassedUsers = new Set(currentProfile.passedUsers);
     const currentBlockedUsers = new Set(currentProfile.blockedUsers || []);
 
-    // Stage 1: hard filters (both sides must pass each other's deal-breakers).
-    const remoteCandidates = snapshot.docs
+    const baseRemoteCandidates = snapshot.docs
       .map((profileDoc) => normalizeUserProfile(profileDoc.data() as Partial<UserProfile>, profileDoc.id))
       .filter((candidateProfile) => candidateProfile.uid !== currentUserEntry.uid)
       .filter((candidateProfile) => !currentLikedUsers.has(candidateProfile.uid))
       .filter((candidateProfile) => !currentPassedUsers.has(candidateProfile.uid))
       .filter((candidateProfile) => !candidateProfile.blockedUsers.includes(currentUserEntry.uid))
-      .filter((candidateProfile) => !currentBlockedUsers.has(candidateProfile.uid))
-      .filter((candidateProfile) => passesDealBreakers(currentProfile, candidateProfile))
-      // Stage 2: soft scoring to rank, not hide, compatible candidates.
+      .filter((candidateProfile) => !currentBlockedUsers.has(candidateProfile.uid));
+
+    const remoteCandidates = baseRemoteCandidates
       .map((candidateProfile) => ({
         candidateProfile,
         score: compareProfilesByPreferences(currentProfile, candidateProfile),
@@ -1543,8 +2146,16 @@ export default function App() {
         compatibility: score,
       }));
 
+    const sampleCandidates = buildSampleDiscoveryFeed(currentProfile)
+      .filter((sampleCandidate) => !remoteCandidates.some((remoteCandidate) => remoteCandidate.id === sampleCandidate.id));
+
+    //for firebase accounts info
+    // setDiscoveryDebug(
+    //   `DEBUG discovery: firestoreDocs=${snapshot.docs.length} eligibleFirebase=${baseRemoteCandidates.length} firebaseShown=${remoteCandidates.length} sampleAppended=${sampleCandidates.length} totalFeed=${remoteCandidates.length + sampleCandidates.length}`,
+    // );
+
     if (remoteCandidates.length) {
-      setDiscoveryFeed(remoteCandidates);
+      setDiscoveryFeed([...remoteCandidates, ...sampleCandidates]);
       setDiscoveryFeedSource('firestore');
       setSwipeIndex(0);
       return;
@@ -1552,30 +2163,75 @@ export default function App() {
 
     setDiscoveryFeed(buildSampleDiscoveryFeed(currentProfile));
     setDiscoveryFeedSource('sample');
+    //for firebase accounts info
+    // setDiscoveryDebug(
+    //   `DEBUG discovery: firestoreDocs=${snapshot.docs.length} eligibleFirebase=${baseRemoteCandidates.length} firebaseShown=0; using sample fallback`,
+    // );
     setSwipeIndex(0);
   };
 
   const loadMatchedDaters = async () => {
-    if (!db || !profile?.matches.length) {
+    if (!db || !profile || !currentUser) {
       setMatchedDaters([]);
       return;
     }
 
     const firestore = db;
+    const candidateMatchIds = Array.from(new Set(profile.matches || []));
+
+    if (!candidateMatchIds.length) {
+      setMatchedDaters([]);
+      return;
+    }
 
     const matchDocs = await Promise.all(
-      profile.matches.map(async (matchId) => {
+      candidateMatchIds.map(async (matchId) => {
         const matchDoc = await getDoc(doc(firestore, 'users', matchId));
 
         if (!matchDoc.exists()) {
           return null;
         }
 
-        return profileToDater(normalizeUserProfile(matchDoc.data() as Partial<UserProfile>, matchId));
+        const candidateProfile = normalizeUserProfile(
+          matchDoc.data() as Partial<UserProfile>,
+          matchId,
+        );
+        const isMutualMatch = candidateProfile.matches.includes(currentUser.uid);
+        const wasRecordedMatch = profile.matches.includes(matchId);
+
+        if (!isMutualMatch && !wasRecordedMatch) {
+          return null;
+        }
+
+        return profileToDater(candidateProfile);
       }),
     );
 
-    setMatchedDaters(matchDocs.filter((match): match is Dater => Boolean(match)));
+    const nextMatchedDaters = matchDocs.filter((match): match is Dater => Boolean(match));
+    const nextMatchIds = nextMatchedDaters.map((match) => match.id);
+
+    setMatchedDaters(nextMatchedDaters);
+
+    const existingMatches = profile.matches || [];
+    const hasMatchListChanged =
+      nextMatchIds.length !== existingMatches.length ||
+      nextMatchIds.some((matchId) => !existingMatches.includes(matchId));
+
+    if (hasMatchListChanged) {
+      const syncedProfile = {
+        ...profile,
+        matches: nextMatchIds,
+      };
+
+      setProfile(syncedProfile);
+      saveLocalProfile(currentUser.uid, syncedProfile);
+
+      await setDoc(
+        doc(firestore, 'users', currentUser.uid),
+        { matches: nextMatchIds },
+        { merge: true },
+      );
+    }
   };
 
   const loadLikedDaters = async (currentProfile: UserProfile) => {
@@ -1628,6 +2284,233 @@ export default function App() {
     setLikedDaters(likedCards.filter((card): card is Dater => Boolean(card)));
   };
 
+  const ensureConversationExists = async (leftUserId: string, rightUserId: string) => {
+    if (!db) {
+      return;
+    }
+
+    const conversationId = getConversationId(leftUserId, rightUserId);
+    const conversationRef = doc(db, 'conversations', conversationId);
+
+    // Create or update the conversation first so a denied pre-read cannot block creation.
+    await setDoc(
+      conversationRef,
+      {
+        participants: [leftUserId, rightUserId],
+        createdAt: serverTimestamp(),
+        lastMessage: '',
+        lastMessageAt: serverTimestamp(),
+      },
+      { merge: true },
+    );
+
+    try {
+      const conversationSnap = await getDoc(conversationRef);
+      // console.log('conversation exists after ensure:', conversationSnap.exists());
+      // console.log('conversation data after ensure:', JSON.stringify(conversationSnap.data() || null));
+    } catch (readError) {
+      const code =
+        typeof readError === 'object' &&
+          readError !== null &&
+          'code' in readError
+          ? String((readError as { code?: unknown }).code)
+          : 'unknown';
+      const message =
+        readError instanceof Error
+          ? readError.message
+          : 'Unknown conversation read error';
+      // console.log(`ensureConversationExists read-back failed: (${code}) ${message}`);
+    }
+  };
+
+  const persistChatMessage = async (message: ChatMessage) => {
+    if (!db || !currentUser || !profile || !selectedMatchId) {
+      return;
+    }
+
+    const conversationId = getConversationId(currentUser.uid, selectedMatchId);
+    const conversationRef = doc(db, 'conversations', conversationId);
+    const messageRef = doc(db, 'conversations', conversationId, 'messages', message.id);
+
+    // Temporary debug instrumentation for rules troubleshooting.
+    // console.log('--- sendMessage debug ---');
+    // console.log('senderId:', currentUser.uid);
+    // console.log('conversationId:', conversationId);
+    // console.log('auth uid:', auth?.currentUser?.uid || null);
+
+    const currentUid = auth?.currentUser?.uid || '';
+
+    if (!currentUid) {
+      // console.error('PROBLEM: No authenticated user found');
+      throw new Error('No authenticated user found.');
+    }
+
+    try {
+      const conversationSnap = await getDoc(conversationRef);
+      // console.log('conversation exists:', conversationSnap.exists());
+      // console.log('conversation data:', conversationSnap.data() || null);
+
+      if (!conversationSnap.exists()) {
+        // console.error('PROBLEM: Conversation document does not exist yet!');
+      }
+
+      const participantsRaw = conversationSnap.data()?.participants;
+      const participants = Array.isArray(participantsRaw)
+        ? participantsRaw.map((entry) => String(entry))
+        : [];
+
+      // console.log('participants:', participants);
+      // console.log('current user in participants:', participants.includes(currentUid));
+    } catch (conversationReadError) {
+      const code =
+        typeof conversationReadError === 'object' &&
+          conversationReadError !== null &&
+          'code' in conversationReadError
+          ? String((conversationReadError as { code?: unknown }).code)
+          : 'unknown';
+      const message =
+        conversationReadError instanceof Error
+          ? conversationReadError.message
+          : 'Unknown conversation read error';
+      // console.error(`PROBLEM: Conversation read blocked before send. (${code}) ${message}`);
+    }
+
+    const batch = writeBatch(db);
+
+    batch.set(
+      conversationRef,
+      {
+        participants: [currentUser.uid, selectedMatchId],
+        updatedAt: serverTimestamp(),
+        lastMessage: message.text,
+        lastMessageSenderId: currentUser.uid,
+        lastMessageSenderName: message.senderName,
+        lastMessageAt: serverTimestamp(),
+      },
+      { merge: true },
+    );
+
+    batch.set(messageRef, {
+      senderId: currentUser.uid,
+      senderName: message.senderName,
+      text: message.text,
+      sentAt: message.sentAt,
+      createdAt: serverTimestamp(),
+      type: 'text',
+    });
+
+    // console.log('attempting batch commit for conversation + message');
+    await batch.commit();
+    // console.log('batch commit succeeded');
+  };
+
+  const handleSendChatMessage = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    if (!db || !currentUser || !profile || !selectedMatchId) {
+      return;
+    }
+
+    if (!matchedDaters.some((dater) => dater.id === selectedMatchId)) {
+      setChatError('You can only message someone after you both match.');
+      return;
+    }
+
+    const messageText = chatDraft.trim();
+
+    if (!messageText) {
+      return;
+    }
+
+    setChatError('');
+    const senderName = profile.fullName || currentUser.displayName || 'User';
+    const optimisticMessage: ChatMessage = {
+      id: doc(collection(db, 'conversations', getConversationId(currentUser.uid, selectedMatchId), 'messages')).id,
+      senderId: currentUser.uid,
+      senderName,
+      text: messageText,
+      sentAt: Date.now(),
+      status: 'pending',
+    };
+
+    setChatDraft('');
+    setChatMessages((current) => mergeChatMessages(current, [optimisticMessage]));
+
+    try {
+      await ensureConversationExists(currentUser.uid, selectedMatchId);
+      await persistChatMessage(optimisticMessage);
+
+      setChatMessages((current) =>
+        current.map((entry) =>
+          entry.id === optimisticMessage.id ? { ...entry, status: 'sent' } : entry,
+        ),
+      );
+    } catch (sendError) {
+      const code =
+        typeof sendError === 'object' &&
+          sendError !== null &&
+          'code' in sendError
+          ? String((sendError as { code?: unknown }).code)
+          : 'unknown';
+      const errorMessage =
+        sendError instanceof Error
+          ? sendError.message
+          : 'Unknown send error';
+
+      setChatMessages((current) =>
+        current.map((entry) =>
+          entry.id === optimisticMessage.id ? { ...entry, status: 'failed' } : entry,
+        ),
+      );
+      setChatDraft(messageText);
+      setChatError(`Unable to send message. (${code}) ${errorMessage}`);
+    }
+  };
+
+  const handleRetryChatMessage = async (message: ChatMessage) => {
+    if (!db || !currentUser || !profile || !selectedMatchId) {
+      return;
+    }
+
+    setChatError('');
+    setChatMessages((current) =>
+      current.map((entry) =>
+        entry.id === message.id ? { ...entry, status: 'pending' } : entry,
+      ),
+    );
+
+    try {
+      await persistChatMessage({
+        ...message,
+        status: 'pending',
+      });
+
+      setChatMessages((current) =>
+        current.map((entry) =>
+          entry.id === message.id ? { ...entry, status: 'sent' } : entry,
+        ),
+      );
+    } catch (retryError) {
+      const code =
+        typeof retryError === 'object' &&
+          retryError !== null &&
+          'code' in retryError
+          ? String((retryError as { code?: unknown }).code)
+          : 'unknown';
+      const errorMessage =
+        retryError instanceof Error
+          ? retryError.message
+          : 'Unknown send error';
+
+      setChatMessages((current) =>
+        current.map((entry) =>
+          entry.id === message.id ? { ...entry, status: 'failed' } : entry,
+        ),
+      );
+      setChatError(`Unable to send message. (${code}) ${errorMessage}`);
+    }
+  };
+
   const handleSignOut = async () => {
     if (!auth) {
       return;
@@ -1640,6 +2523,10 @@ export default function App() {
     setLikedDaters([]);
     setMatchesModalOpen(false);
     setMatchedDaters([]);
+    setSelectedMatchId('');
+    setChatDraft('');
+    setChatMessages([]);
+    setChatError('');
   };
 
   const renderFrame = (content: ReactNode) => (
@@ -1689,87 +2576,321 @@ export default function App() {
 
   const renderTabContent = () => {
     if (activeTab === 'calendar') {
+      const selectedCalendarDate = isSingleCalendarDate(calendarValue)
+        ? formatCalendarDateValue(calendarValue)
+        : formatCalendarDateValue(new Date());
+      const plansForSelectedDay = calendarPlans.filter((plan) =>
+        isSameCalendarDay(plan.date, selectedCalendarDate),
+      );
+
       return (
         <>
           <section className="calendar">
             <h2>Calendar</h2>
-            
+
             <div>
-               {/* className="calendar-grid"> */}
-               <Calendar onChange={setCalendarValue} value={calendarValue}/>
+              {/* className="calendar-grid"> */}
+              <Calendar onChange={setCalendarValue} value={calendarValue} />
             </div>
           </section>
 
           <section className="home-grid">
-            <article className="home-tile">
-              <h3>Pascal's Coffeehouse - Friday</h3>
-              <p>7:00 PM with Maya. Saved as a casual first date near campus.</p>
-            </article>
+            {plansForSelectedDay.length ? (
+              plansForSelectedDay.map((plan) => (
+                <article key={plan.id} className="home-tile">
+                  <h3>{plan.title}</h3>
+                  <p>{plan.place}</p>
+                  <p>With {plan.matchName} on {formatCalendarEntryLabel(plan.date)}</p>
+                  <p>{plan.description}</p>
+                </article>
+              ))
+            ) : (
+              <article className="home-tile">
+                <h3>No saved dates for this day</h3>
+                <p>Use the planner tab to generate 3 ideas, then add one to your calendar.</p>
+              </article>
+            )}
           </section>
         </>
       );
     }
 
     if (activeTab === 'planner') {
+      const selectedPlannerMatch =
+        matchedDaters.find((dater) => dater.id === selectedPlannerMatchId) || null;
+      const plannerPrompts = buildPlannerPrompts(profile, selectedPlannerMatch);
+      const hasPlannerSessionStarted = plannerMessages.some((message) => message.role === 'user');
+
       return (
         <>
-          <p className="account-detail">Describe the kind of date you want and get Gainesville-friendly suggestions.</p>
+          <p className="account-detail">
+            Pick a match, then describe the kind of date you want and get Gainesville-friendly suggestions tailored to both of you.
+          </p>
+          {!isGeminiConfigured ? (
+            <p className="planner-helper-text">
+              Add <code>VITE_GEMINI_API_KEY</code> to <code>gator-dater-app/.env</code> to enable the chatbot.
+            </p>
+          ) : null}
+          {!matchedDaters.length ? (
+            <p className="planner-helper-text">
+              Match with someone first to plan a date together!
+            </p>
+          ) : (
+            <section className="home-tile">
+              <label className="account-label" htmlFor="planner-match-select">
+                Plan for a specific match
+              </label>
+              <select
+                id="planner-match-select"
+                className="preferences-select"
+                value={selectedPlannerMatchId}
+                onChange={(event) => setSelectedPlannerMatchId(event.target.value)}
+                disabled={plannerLoading}
+              >
+                {matchedDaters.map((dater) => (
+                  <option key={dater.id} value={dater.id}>
+                    {dater.name} · {dater.vibe}
+                  </option>
+                ))}
+              </select>
+              {selectedPlannerMatch ? (
+                <p className="planner-helper-text">
+                  Planning for {selectedPlannerMatch.name}: {selectedPlannerMatch.bio}
+                </p>
+              ) : null}
+            </section>
+          )}
 
-          <section className="prompt-grid">
-            <button className="prompt-button">
-              <p>Local coffee shops</p>
-              <img src={searchImg} alt="Search" className="Search" />
-            </button>
-            <button className="prompt-button">
-              <p>Date ideas for [insert person here]</p>
-              <img src={searchImg} alt="Search" className="Search" />
-            </button>
-            <button className="prompt-button">
-              <p>Best days for picnic near me</p>
-              <img src={searchImg} alt="Search" className="Search" />
-            </button>
-          </section>
+          {!hasPlannerSessionStarted ? (
+            <section className="prompt-grid">
+              {plannerPrompts.map((prompt) => (
+                <button
+                  key={prompt.id}
+                  className="prompt-button"
+                  type="button"
+                  onClick={() => void handlePlannerPromptClick(prompt.prompt)}
+                  disabled={plannerLoading || !matchedDaters.length}
+                >
+                  <p>{prompt.label}</p>
+                  <img src={searchImg} alt="Search" className="Search" />
+                </button>
+              ))}
+            </section>
+          ) : null}
 
           <section className="chat">
-            <div className="chat-section">
-              <div className="message-from-other">
-                <p>Hello! How can I help you find the perfect date idea?</p>
-              </div>
-              <div className="message-from-user">
-                <p>I'm looking for a fun and casual date idea near campus for this weekend.</p>
-              </div>
+            <div className="chat-section planner-chat-section" ref={plannerChatRef}>
+              {plannerMessages.map((message, index) => (
+                <div
+                  key={`${message.role}-${index}`}
+                  className={
+                    message.role === 'assistant'
+                      ? `message-from-other${message.dateOptions?.length ? ' planner-response-message' : ''}`
+                      : 'message-from-user'
+                  }
+                >
+                  <p>{message.text}</p>
+                  {message.role === 'assistant' && message.dateOptions?.length ? (
+                    <div className="planner-option-list">
+                      {message.dateOptions.map((option, optionIndex) => {
+                        const isSavingThisOption =
+                          pendingCalendarSave?.messageIndex === index &&
+                          pendingCalendarSave?.optionIndex === optionIndex;
+
+                        return (
+                          <article key={`${option.title}-${optionIndex}`} className="home-tile planner-date-block">
+                            <h3>{option.title}</h3>
+                            <p>{option.place}</p>
+                            <p>{option.description}</p>
+                            <p>{option.whyItFits}</p>
+                            <button
+                              className="secondary-button"
+                              type="button"
+                              onClick={() => handleStartCalendarSave(index, optionIndex)}
+                            >
+                              Add to calendar
+                            </button>
+                            {isSavingThisOption ? (
+                              <div className="planner-calendar-save">
+                                <label htmlFor={`planner-date-${index}-${optionIndex}`}>
+                                  Pick a date
+                                </label>
+                                <input
+                                  id={`planner-date-${index}-${optionIndex}`}
+                                  type="date"
+                                  value={pendingCalendarSave.date}
+                                  onChange={(event) =>
+                                    setPendingCalendarSave((current) =>
+                                      current
+                                        ? {
+                                          ...current,
+                                          date: event.target.value,
+                                        }
+                                        : current,
+                                    )
+                                  }
+                                />
+                                <button
+                                  className="primary-button"
+                                  type="button"
+                                  onClick={() =>
+                                    handleConfirmCalendarSave(
+                                      option,
+                                      selectedPlannerMatch?.name || 'your match',
+                                    )
+                                  }
+                                  disabled={!pendingCalendarSave.date}
+                                >
+                                  Save date
+                                </button>
+                              </div>
+                            ) : null}
+                          </article>
+                        );
+                      })}
+                    </div>
+                  ) : null}
+                </div>
+              ))}
+              {plannerLoading ? (
+                <div className="message-from-other planner-typing">
+                  <p>Thinking through a few ideas...</p>
+                </div>
+              ) : null}
             </div>
-            <div className="chat-input">
-              <input type="text" placeholder="Ask for date ideas..." />
-              <button className="submit-button" type="button">
+            {plannerError ? <p className="planner-error-text">{plannerError}</p> : null}
+            <form className="chat-input" onSubmit={handlePlannerSubmit}>
+              <input
+                type="text"
+                placeholder={matchedDaters.length ? 'Ask for date ideas for this match...' : 'Match with someone first!'}
+                value={plannerInput}
+                onChange={(event) => setPlannerInput(event.target.value)}
+                disabled={!isGeminiConfigured || plannerLoading || !matchedDaters.length}
+              />
+              <button
+                className="submit-button"
+                type="submit"
+                disabled={!isGeminiConfigured || plannerLoading || !plannerInput.trim() || !matchedDaters.length}
+              >
                 <img src={submitImg} alt="Send" className="send-icon" />
               </button>
-            </div>
+            </form>
           </section>
         </>
       );
     }
 
     if (activeTab === 'chats') {
-      return (
-        <section className="home-grid">
-          {/* Example 1: Ava */}
-          <article className="chat-match-row unread">
-            <div className="profile-circle-mini" />
-            <div className="chat-text-meta">
-              <h3 className="chat-name">Ava</h3>
-              <p className="chat-preview">That coffee place looks cute. Want to go Thursday?</p>
-            </div>
-          </article>
+      const selectedMatch = matchedDaters.find((dater) => dater.id === selectedMatchId) || null;
 
-          {/* Example 2: Jordan */}
-          <article className="chat-match-row">
-            <div className="profile-circle-mini" />
-            <div className="chat-text-meta">
-              <h3 className="chat-name">Jordan</h3>
-              <p className="chat-preview">What kind of food do you usually like for first dates?</p>
-            </div>
-          </article>
+      if (!selectedMatch) {
+        return (
+          <section className="home-grid">
+            {matchedDaters.length ? (
+              matchedDaters.map((dater) => (
+                <article
+                  key={dater.id}
+                  className="chat-match-row"
+                  onClick={() => {
+                    setChatError('');
+                    setSelectedMatchId(dater.id);
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      setChatError('');
+                      setSelectedMatchId(dater.id);
+                    }
+                  }}
+                  role="button"
+                  tabIndex={0}
+                >
+                  {dater.photoUrl ? (
+                    <img
+                      src={dater.photoUrl}
+                      alt={`${dater.name} profile`}
+                      className="profile-circle-mini profile-circle-mini-image"
+                    />
+                  ) : (
+                    <div className="profile-circle-mini" />
+                  )}
+                  <div className="chat-text-meta">
+                    <h3 className="chat-name">{dater.name}</h3>
+                    <p className="chat-preview">Open conversation</p>
+                  </div>
+                </article>
+              ))
+            ) : (
+              <p className="account-detail">No mutual matches yet. Chats appear once both users like each other.</p>
+            )}
+          </section>
+        );
+      }
+
+      return (
+        <section className="chat no-scroll">
+          <div className="chat-thread-top">
+            <button className="chat-back-link" type="button" onClick={() => {
+              setChatError('');
+              setSelectedMatchId('');
+            }}>
+              <img src={backArrrow} alt="Back" className="chat-back-icon" />
+              <span>Back to matches</span>
+            </button>
+            <h3 className="chat-thread-name">{selectedMatch.name}</h3>
+          </div>
+          <div className="chat-section">
+            {chatMessages.length ? (
+              chatMessages.map((message) => {
+                const isCurrentUserMessage = message.senderId === currentUser?.uid;
+                const otherUserReadAt = selectedMatch ? conversationReadBy[selectedMatch.id] || 0 : 0;
+                const messageStatus = isCurrentUserMessage
+                  ? otherUserReadAt >= message.sentAt
+                    ? 'Viewed'
+                    : 'Sent'
+                  : '';
+                const timeLabel = formatChatTime(message.sentAt);
+
+                return (
+                  <div
+                    key={message.id}
+                    className={isCurrentUserMessage ? 'message-from-user' : 'message-from-other'}
+                    data-status={message.status || ''}
+                  >
+                    <p>{message.text}</p>
+                    <span className="chat-message-meta">
+                      {timeLabel}
+                      {messageStatus ? ` • ${messageStatus}` : ''}
+                      {message.status === 'failed' ? ' • Failed' : ''}
+                    </span>
+                    {isCurrentUserMessage && message.status === 'failed' ? (
+                      <button
+                        className="chat-retry-button"
+                        type="button"
+                        onClick={() => handleRetryChatMessage(message)}
+                      >
+                        Retry
+                      </button>
+                    ) : null}
+                  </div>
+                );
+              })
+            ) : (
+              <p className="account-detail">No messages yet. Say hi.</p>
+            )}
+          </div>
+
+          <form className="chat-input" onSubmit={handleSendChatMessage}>
+            <input
+              type="text"
+              value={chatDraft}
+              onChange={(event) => setChatDraft(event.target.value)}
+              placeholder={`Message ${selectedMatch.name}`}
+            />
+            <button className="submit-button" type="submit" disabled={!chatDraft.trim()}>
+              <img src={submitImg} alt="Send" className="send-icon" />
+            </button>
+          </form>
+          {chatError ? <p className="error-text chat-error-line">{chatError}</p> : null}
         </section>
       );
     }
@@ -1778,13 +2899,21 @@ export default function App() {
       return (
         <>
           <section className="intro-profile-panel">
-            {profile?.photoUrl || currentUser?.photoURL ? (
+            {activeProfilePhoto ? (
               <div className="profile-photo-wrap">
                 <img
-                  src={profile?.photoUrl || currentUser?.photoURL || ''}
+                  src={activeProfilePhoto}
                   alt={`${profile?.fullName || currentUser?.displayName || 'User'} profile`}
                   className="profile-photo"
                 />
+                <button
+                  className="profile-photo-edit-button"
+                  type="button"
+                  onClick={() => profilePhotoInputRef.current?.click()}
+                  aria-label="Edit profile photo"
+                >
+                  <img src={writeImg} alt="" className="profile-photo-edit-icon" />
+                </button>
               </div>
             ) : null}
             <h1>{profile?.fullName || currentUser?.displayName || currentUser?.email}</h1>
@@ -1796,13 +2925,6 @@ export default function App() {
               className="hidden-input"
               onChange={handleProfilePhotoUpdate}
             />
-            <button
-              className="secondary-button tile-button"
-              type="button"
-              onClick={() => profilePhotoInputRef.current?.click()}
-            >
-              Edit Profile Photo
-            </button>
           </section>
           <section className="home-grid">
             <article className="profile-tile">
@@ -1844,7 +2966,7 @@ export default function App() {
                 }}
                 type="button"
               >
-                View Matches ({profile?.matches.length || 0})
+                View Matches ({matchedDaters.length})
               </button>
               <button className="secondary-button tile-button" onClick={handleSignOut} type="button">
                 Sign Out
@@ -1859,14 +2981,21 @@ export default function App() {
       <>
         <section className="swipe-stack">
           {currentDater ? (
-            <article className="swipe-card" /*style={{ backgroundImage: `url(${currentDater.image})` }} */>
-              <p>{currentDater.compatibility}% match</p>
-              <h2>
-                {currentDater.name}, {currentDater.age}
-              </h2>
-              <p>{currentDater.yearAtUf}</p>
-              <p className="swipe-vibe">{currentDater.vibe}</p>
-              <p>{currentDater.bio}</p>
+            <article
+              className="swipe-card"
+              style={{
+                backgroundImage: `url(${currentDater.photoUrl})`,
+              }}
+            >
+              <div className="swipe-overlay">
+                <p>{currentDater.compatibility}% match</p>
+                <h2>
+                  {currentDater.name}, {currentDater.age}
+                </h2>
+                <p>{currentDater.yearAtUf}</p>
+                <p className="swipe-vibe">{currentDater.vibe}</p>
+                <p>{currentDater.bio}</p>
+              </div>
             </article>
           ) : (
             <article className="swipe-card done-card">
@@ -1884,6 +3013,8 @@ export default function App() {
             <img className="action-btn-icon" src={likeImg} alt="Like" />
           </button>
         </div>
+        {/* //for firebase accounts info */}
+        {/* {discoveryDebug ? <p className="account-detail">{discoveryDebug}</p> : null} */}
       </>
     );
   };
@@ -1913,42 +3044,75 @@ export default function App() {
 
       if (db && discoveryFeedSource === 'firestore') {
         try {
-          const likedUserRef = doc(db, 'users', currentDater.id);
-          const likedUserSnap = await getDoc(likedUserRef);
+          const likedUserSnap = await getDoc(doc(db, 'users', currentDater.id));
           const likedUserProfile = likedUserSnap.exists()
             ? normalizeUserProfile(likedUserSnap.data() as Partial<UserProfile>, currentDater.id)
             : null;
           const matchedBack = !!likedUserProfile?.likedUsers.includes(currentUser.uid);
+          const conversationId = getConversationId(currentUser.uid, currentDater.id);
 
           const nextMatches = matchedBack
             ? Array.from(new Set([...(profile.matches || []), currentDater.id]))
             : profile.matches || [];
-          const nextLikedUserMatches = matchedBack && likedUserProfile
+          const nextConversations = matchedBack
+            ? {
+              ...(profile.conversations || {}),
+              [currentDater.id]: conversationId,
+            }
+            : (profile.conversations || {});
+
+          const likedUserMatches = matchedBack && likedUserProfile
             ? Array.from(new Set([...(likedUserProfile.matches || []), currentUser.uid]))
             : likedUserProfile?.matches || [];
+          const likedUserConversations = matchedBack && likedUserProfile
+            ? {
+              ...(likedUserProfile.conversations || {}),
+              [currentUser.uid]: conversationId,
+            }
+            : (likedUserProfile?.conversations || {});
 
-          if (currentUserRef) {
-            await setDoc(
+          if (matchedBack && currentUserRef && likedUserSnap.exists()) {
+            const likedUserRef = doc(db, 'users', currentDater.id);
+            const conversationRef = doc(db, 'conversations', conversationId);
+            const batch = writeBatch(db);
+
+            batch.set(
               currentUserRef,
-              { likedUsers: nextLikedUserIds, matches: nextMatches },
+              {
+                likedUsers: nextLikedUserIds,
+                matches: nextMatches,
+                conversations: nextConversations,
+              },
               { merge: true },
             );
-          }
-
-          if (matchedBack) {
-            await setDoc(
+            batch.set(
               likedUserRef,
-              { matches: nextLikedUserMatches },
+              {
+                matches: likedUserMatches,
+                conversations: likedUserConversations,
+              },
               { merge: true },
             );
+            batch.set(conversationRef, buildConversationPayload(currentUser.uid, currentDater.id), { merge: true });
 
-            const matchedProfile = { ...nextProfile, matches: nextMatches };
+            await batch.commit();
+
+            const matchedProfile = {
+              ...nextProfile,
+              matches: nextMatches,
+              conversations: nextConversations,
+            };
             setProfile(matchedProfile);
             saveLocalProfile(currentUser.uid, matchedProfile);
-            // Future Gemini integration: use both users' shared interests/dateVibe
-            // to generate a date plan once matching chat/planner is connected.
             setStatus('It\'s a match!');
+          } else if (currentUserRef) {
+            await setDoc(
+              currentUserRef,
+              { likedUsers: nextLikedUserIds },
+              { merge: true },
+            );
           }
+
         } catch {
           if (currentUserRef) {
             await setDoc(currentUserRef, { likedUsers: nextLikedUserIds }, { merge: true });
@@ -2332,6 +3496,19 @@ export default function App() {
                 </select>
               </label>
               <div>
+                <label style={{ display: 'block', textAlign: 'left' }}>Bio</label>
+                <textarea
+                  className="bio-textarea"
+                  value={profileForm.bio}
+                  onChange={(event) =>
+                    setProfileForm((current) => ({ ...current, bio: event.target.value }))
+                  }
+                  placeholder="Tell people about yourself"
+                  rows={5}
+                  maxLength={220}
+                />
+              </div>
+              <div>
                 <label>Describe yourself (Pick up to 3)</label>
                 <div className="hobbies-scroll-list">
                   {vibeWordOptions.map((word) => (
@@ -2581,6 +3758,15 @@ export default function App() {
               <div className="likes-list">
                 {likedDaters.map((dater) => (
                   <article key={dater.id} className="liked-card">
+                    {dater.photoUrl ? (
+                      <div className="profile-photo-wrap">
+                        <img
+                          src={dater.photoUrl}
+                          alt={`${dater.name} profile`}
+                          className="profile-photo liked-profile-photo"
+                        />
+                      </div>
+                    ) : null}
                     <p className="account-label">{dater.compatibility}% match</p>
                     <h3>
                       {dater.name}, {dater.age}
@@ -2612,6 +3798,15 @@ export default function App() {
               <div className="likes-list">
                 {matchedDaters.map((dater) => (
                   <article key={dater.id} className="liked-card">
+                    {dater.photoUrl ? (
+                      <div className="profile-photo-wrap">
+                        <img
+                          src={dater.photoUrl}
+                          alt={`${dater.name} profile`}
+                          className="profile-photo liked-profile-photo"
+                        />
+                      </div>
+                    ) : null}
                     <p className="account-label">{dater.compatibility}% match</p>
                     <h3>
                       {dater.name}, {dater.age}
