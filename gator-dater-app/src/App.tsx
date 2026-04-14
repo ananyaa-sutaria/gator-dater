@@ -12,6 +12,7 @@ import {
 import {
   addDoc,
   collection,
+  deleteField,
   doc,
   getDoc,
   getDocs,
@@ -21,7 +22,7 @@ import {
   query,
   serverTimestamp,
   setDoc,
-  where,
+  writeBatch,
 } from 'firebase/firestore';
 import { auth, db, isFirebaseConfigured } from './firebase';
 import gatorImage from '../assets/PLEASE REPLACE.png';
@@ -175,8 +176,18 @@ type UserProfile = {
   passedUsers: string[];
   matches: string[];
   blockedUsers: string[];
+  conversations?: Record<string, string>;
   onboardingCompleted: boolean;
   createdAt?: unknown;
+};
+
+type ChatMessage = {
+  id: string;
+  senderId: string;
+  senderName: string;
+  text: string;
+  sentAt: number;
+  status?: 'pending' | 'sent' | 'failed';
 };
 
 const initialSignUp: SignUpState = {
@@ -290,12 +301,13 @@ const interestOptions = [
   'Travel',
   'Volunteering',
 ];
+
 const sampleDiscoveryProfiles: Array<Partial<UserProfile> & { uid: string }> = [
   {
     uid: 'sample-leah',
     firstName: 'Leah',
-    lastName: 'R',
-    fullName: 'Leah R',
+    lastName: 'Sample',
+    fullName: 'Leah Sample',
     age: 21,
     yearAtUf: 'Junior',
     bio: 'Quiet reader who loves coffee shop hangs and movie nights.',
@@ -320,10 +332,10 @@ const sampleDiscoveryProfiles: Array<Partial<UserProfile> & { uid: string }> = [
     },
   },
   {
-    uid: 'sample-ava',
+    uid: 'sample-ethan',
     firstName: 'Ethan',
-    lastName: 'M',
-    fullName: 'Ethan M',
+    lastName: 'Sample',
+    fullName: 'Ethan Sample',
     age: 20,
     yearAtUf: 'Sophomore',
     bio: 'Outgoing and social, always down to try a new spot in town.',
@@ -350,8 +362,8 @@ const sampleDiscoveryProfiles: Array<Partial<UserProfile> & { uid: string }> = [
   {
     uid: 'sample-jordan',
     firstName: 'Jordan',
-    lastName: 'T',
-    fullName: 'Jordan T',
+    lastName: 'Sample',
+    fullName: 'Jordan Sample',
     age: 22,
     yearAtUf: 'Senior',
     bio: 'Gym regular who likes active first dates and football weekends.',
@@ -378,8 +390,8 @@ const sampleDiscoveryProfiles: Array<Partial<UserProfile> & { uid: string }> = [
   {
     uid: 'sample-dylan',
     firstName: 'Dylan',
-    lastName: 'Cruz',
-    fullName: 'Dylan Cruz',
+    lastName: 'Sample',
+    fullName: 'Dylan Sample',
     age: 21,
     yearAtUf: 'Junior',
     bio: 'Low-key gamer and foodie who likes good playlists and better conversation.',
@@ -404,10 +416,10 @@ const sampleDiscoveryProfiles: Array<Partial<UserProfile> & { uid: string }> = [
     },
   },
   {
-    uid: 'sample-maya',
+    uid: 'sample-noah',
     firstName: 'Noah',
-    lastName: 'S',
-    fullName: 'Noah S',
+    lastName: 'Sample',
+    fullName: 'Noah Sample',
     age: 21,
     yearAtUf: 'Junior',
     bio: 'Creative and thoughtful, happiest with art, film, and chill weekends.',
@@ -434,8 +446,8 @@ const sampleDiscoveryProfiles: Array<Partial<UserProfile> & { uid: string }> = [
   {
     uid: 'sample-nina',
     firstName: 'Nina',
-    lastName: 'K',
-    fullName: 'Nina K',
+    lastName: 'Sample',
+    fullName: 'Nina Sample',
     age: 19,
     yearAtUf: 'Freshman',
     bio: 'Friendly and easygoing, into coffee runs, trivia nights, and games.',
@@ -460,10 +472,10 @@ const sampleDiscoveryProfiles: Array<Partial<UserProfile> & { uid: string }> = [
     },
   },
   {
-    uid: 'sample-sophia',
+    uid: 'sample-liam',
     firstName: 'Liam',
-    lastName: 'L',
-    fullName: 'Liam L',
+    lastName: 'Sample',
+    fullName: 'Liam Sample',
     age: 23,
     yearAtUf: 'Graduate',
     bio: 'Planner with foodie energy who enjoys weekend adventures and live music.',
@@ -625,6 +637,9 @@ const normalizeUserProfile = (rawProfile: Partial<UserProfile>, uid: string): Us
     passedUsers: Array.isArray(rawProfile.passedUsers) ? rawProfile.passedUsers : [],
     matches: Array.isArray(rawProfile.matches) ? rawProfile.matches : [],
     blockedUsers: Array.isArray(rawProfile.blockedUsers) ? rawProfile.blockedUsers : [],
+    conversations: rawProfile.conversations && typeof rawProfile.conversations === 'object'
+      ? (rawProfile.conversations as Record<string, string>)
+      : {},
     onboardingCompleted: rawProfile.onboardingCompleted ?? false,
     createdAt: rawProfile.createdAt,
   };
@@ -682,33 +697,115 @@ const isOfflineFirestoreError = (value: unknown) =>
     value.message.toLowerCase().includes('offline') ||
     value.message.toLowerCase().includes('unavailable'));
 const getProfileStorageKey = (uid: string) => `gator-dater-profile:${uid}`;
-const getChatId = (leftUserId: string, rightUserId: string) =>
-  [leftUserId, rightUserId].sort().join('__');
-const plannerGreeting =
-  'Hi! I can help plan Gainesville-friendly dates around your budget, vibe, and schedule. Tell me what you want, and I’ll suggest a few options.';
-const buildPlannerPrompts = (currentProfile: UserProfile | null): PlannerPrompt[] => {
-  const interest = currentProfile?.interests[0] || currentProfile?.preferences.interests[0] || 'coffee';
-  const vibe = currentProfile?.dateVibe[0] || currentProfile?.preferences.dateVibe[0] || 'casual';
-  const availability = currentProfile?.availability[0] || currentProfile?.preferences.availability[0] || 'this weekend';
-  const budget = currentProfile?.dateBudget || currentProfile?.preferences.dateBudget || 'low';
+const buildFirestoreUserProfile = (nextProfile: UserProfile) => ({
+  uid: nextProfile.uid,
+  firstName: nextProfile.firstName,
+  lastName: nextProfile.lastName,
+  fullName: nextProfile.fullName,
+  name: nextProfile.name,
+  age: nextProfile.age,
+  yearAtUf: nextProfile.yearAtUf,
+  bio: nextProfile.bio,
+  email: nextProfile.email,
+  photoUrl: nextProfile.photoUrl,
+  preferences: nextProfile.preferences,
+  likedUsers: nextProfile.likedUsers,
+  passedUsers: nextProfile.passedUsers,
+  matches: nextProfile.matches,
+  blockedUsers: nextProfile.blockedUsers,
+  conversations: nextProfile.conversations || {},
+  onboardingCompleted: nextProfile.onboardingCompleted,
+  createdAt: nextProfile.createdAt || serverTimestamp(),
+  gender: deleteField(),
+  genderPreference: deleteField(),
+  intentionOpenTo: deleteField(),
+  ageRange: deleteField(),
+  intention: deleteField(),
+  interests: deleteField(),
+  dateBudget: deleteField(),
+  dateVibe: deleteField(),
+  distance: deleteField(),
+  availability: deleteField(),
+});
+const getChatStorageKey = (leftUserId: string, rightUserId: string) =>
+  `gator-dater-chat:${[leftUserId, rightUserId].sort().join('__')}`;
+const getConversationId = (leftUserId: string, rightUserId: string) => {
+  // console.log('uid1 raw:', JSON.stringify(leftUserId));
+  // console.log('uid2 raw:', JSON.stringify(rightUserId));
+  // console.log('uid1 length:', leftUserId.length);
+  // console.log('uid2 length:', rightUserId.length);
 
-  return [
-    {
-      id: 'quick-coffee',
-      label: 'Local coffee shops',
-      prompt: `Plan a ${budget}-budget coffee date near UF with two cozy spots and an easy follow-up activity.`,
-    },
-    {
-      id: 'quick-personalized',
-      label: `Ideas for someone into ${interest}`,
-      prompt: `Suggest three ${vibe} date ideas in Gainesville for someone who likes ${interest}.`,
-    },
-    {
-      id: 'quick-weekend',
-      label: 'Best picnic timing',
-      prompt: `Plan a ${vibe} outdoor date around ${availability} with a picnic-friendly Gainesville route and backup indoor option.`,
-    },
-  ];
+  return [leftUserId, rightUserId].sort().join('_');
+};
+const getConversationParticipantIds = (leftUserId: string, rightUserId: string) =>
+  [leftUserId, rightUserId].sort();
+const mergeChatMessages = (primary: ChatMessage[], secondary: ChatMessage[]) => {
+  const mergedMessages = new Map<string, ChatMessage>();
+
+  [...primary, ...secondary].forEach((message) => {
+    mergedMessages.set(message.id, message);
+  });
+
+  return Array.from(mergedMessages.values()).sort((leftMessage, rightMessage) => {
+    if (leftMessage.sentAt === rightMessage.sentAt) {
+      return leftMessage.id.localeCompare(rightMessage.id);
+    }
+
+    return leftMessage.sentAt - rightMessage.sentAt;
+  });
+};
+const loadLocalChatMessages = (leftUserId: string, rightUserId: string): ChatMessage[] => {
+  if (typeof window === 'undefined') {
+    return [] as ChatMessage[];
+  }
+
+  try {
+    const storedMessages = window.localStorage.getItem(getChatStorageKey(leftUserId, rightUserId));
+
+    if (!storedMessages) {
+      return [];
+    }
+
+    const parsedMessages = JSON.parse(storedMessages) as Array<Partial<ChatMessage> & { status?: unknown }>;
+
+    return parsedMessages
+      .map((message): ChatMessage => ({
+        id: String(message.id || ''),
+        senderId: String(message.senderId || ''),
+        senderName: String(message.senderName || ''),
+        text: String(message.text || ''),
+        sentAt: Number(message.sentAt || 0),
+        status: ((message.status === 'pending' || message.status === 'failed')
+          ? message.status
+          : 'sent') as ChatMessage['status'],
+      }))
+      .filter((message) => Boolean(message.id) && Boolean(message.senderId) && Boolean(message.text));
+  } catch {
+    return [];
+  }
+};
+const saveLocalChatMessages = (leftUserId: string, rightUserId: string, messages: ChatMessage[]) => {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  window.localStorage.setItem(getChatStorageKey(leftUserId, rightUserId), JSON.stringify(messages));
+};
+const buildConversationPayload = (leftUserId: string, rightUserId: string) => ({
+  participants: [leftUserId, rightUserId],
+  createdAt: serverTimestamp(),
+  lastMessage: '',
+  lastMessageAt: serverTimestamp(),
+});
+const formatChatTime = (timestamp: number) => {
+  if (!timestamp) {
+    return '';
+  }
+
+  return new Date(timestamp).toLocaleTimeString([], {
+    hour: 'numeric',
+    minute: '2-digit',
+  });
 };
 
 export default function App() {
@@ -729,6 +826,11 @@ export default function App() {
   const [likesModalOpen, setLikesModalOpen] = useState(false);
   const [matchesModalOpen, setMatchesModalOpen] = useState(false);
   const [matchedDaters, setMatchedDaters] = useState<Dater[]>([]);
+  const [selectedMatchId, setSelectedMatchId] = useState('');
+  const [chatDraft, setChatDraft] = useState('');
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatError, setChatError] = useState('');
+  const [conversationReadBy, setConversationReadBy] = useState<Record<string, number>>({});
   const [discoveryFeed, setDiscoveryFeed] = useState<Dater[]>(() => buildSampleDiscoveryFeed());
   const [discoveryFeedSource, setDiscoveryFeedSource] = useState<'sample' | 'firestore'>('sample');
   const [preferencesSection, setPreferencesSection] = useState<'preferences' | 'deal-breakers'>('preferences');
@@ -841,158 +943,122 @@ export default function App() {
   }, [currentUser, profile]);
 
   useEffect(() => {
-    const chatContainer = plannerChatRef.current;
-
-    if (!chatContainer) {
+    if (!currentUser || !profile) {
+      setMatchedDaters([]);
       return;
     }
 
-    chatContainer.scrollTop = chatContainer.scrollHeight;
-  }, [plannerMessages, plannerLoading]);
+    void loadMatchedDaters();
+  }, [currentUser, profile]);
 
   useEffect(() => {
-    const chatContainer = userChatRef.current;
-
-    if (!chatContainer) {
+    if (!matchedDaters.length) {
+      setSelectedMatchId('');
       return;
     }
 
-    chatContainer.scrollTop = chatContainer.scrollHeight;
-  }, [chatMessages, chatLoading]);
+    setSelectedMatchId((currentSelected) =>
+      currentSelected && matchedDaters.some((dater) => dater.id === currentSelected)
+        ? currentSelected
+        : '',
+    );
+  }, [matchedDaters]);
 
   useEffect(() => {
-    if (!currentUser || !db) {
-      setChatConversations([]);
-      setSelectedChatId('');
+    if (!db || !currentUser || !selectedMatchId) {
+      setChatMessages([]);
+      setConversationReadBy({});
       return;
     }
 
-    const firestore = db;
+    let unsubscribeMessages = () => {};
+    let unsubscribeConversation = () => {};
     let cancelled = false;
 
-    const loadChatConversations = async () => {
-      const chatParticipantIds = new Set(profile?.likedUsers || []);
+    void (async () => {
       try {
-        const existingChatsSnapshot = await getDocs(
-          query(collection(firestore, 'chats'), where('participants', 'array-contains', currentUser.uid)),
+        if (cancelled) {
+          return;
+        }
+
+        const conversationId = getConversationId(currentUser.uid, selectedMatchId);
+        const conversationRef = doc(db, 'conversations', conversationId);
+        const conversationSnap = await getDoc(conversationRef);
+
+        if (!conversationSnap.exists()) {
+          setChatMessages([]);
+          setConversationReadBy({});
+          return;
+        }
+
+        const messagesQuery = query(
+          collection(db, 'conversations', conversationId, 'messages'),
+          orderBy('sentAt', 'asc'),
+          limit(200),
         );
 
-        existingChatsSnapshot.docs.forEach((chatDoc) => {
-          const chatData = chatDoc.data() as { participants?: string[] };
-          chatData.participants?.forEach((participantId) => {
-            if (participantId !== currentUser.uid) {
-              chatParticipantIds.add(participantId);
+        unsubscribeMessages = onSnapshot(
+          messagesQuery,
+          (snapshot) => {
+            const nextMessages = snapshot.docs.map((snapshotDoc): ChatMessage => ({
+              id: snapshotDoc.id,
+              senderId: String(snapshotDoc.data().senderId || ''),
+              senderName: String(snapshotDoc.data().senderName || ''),
+              text: String(snapshotDoc.data().text || ''),
+              sentAt: Number(snapshotDoc.data().sentAt || 0),
+              status: 'sent',
+            }));
+
+            setChatMessages((current) => mergeChatMessages(current, nextMessages));
+          },
+          () => {
+            setChatMessages([]);
+          },
+        );
+
+        unsubscribeConversation = onSnapshot(
+          conversationRef,
+          (snapshot) => {
+            const readByRaw = snapshot.data()?.lastReadAtBy;
+
+            if (!readByRaw || typeof readByRaw !== 'object') {
+              setConversationReadBy({});
+              return;
             }
-          });
-        });
+
+            const normalizedReadBy = Object.entries(readByRaw as Record<string, unknown>).reduce<Record<string, number>>(
+              (accumulator, [uid, value]) => {
+                const numericValue = Number(value);
+
+                if (!Number.isNaN(numericValue) && numericValue > 0) {
+                  accumulator[uid] = numericValue;
+                }
+
+                return accumulator;
+              },
+              {},
+            );
+
+            setConversationReadBy(normalizedReadBy);
+          },
+          () => {
+            setConversationReadBy({});
+          },
+        );
       } catch {
-        // Fall back to the people this user has liked when chat collection queries are restricted.
+        if (!cancelled) {
+          setChatMessages([]);
+          setConversationReadBy({});
+        }
       }
-
-      if (!chatParticipantIds.size) {
-        setChatConversations([]);
-        setSelectedChatId('');
-        setChatError('');
-        return;
-      }
-
-      const conversations = await Promise.all(
-        Array.from(chatParticipantIds).map(async (participantId) => {
-          try {
-            const matchDoc = await getDoc(doc(firestore, 'users', participantId));
-
-            if (!matchDoc.exists()) {
-              return null;
-            }
-
-            const matchProfile = normalizeUserProfile(matchDoc.data() as Partial<UserProfile>, participantId);
-            const chatId = getChatId(currentUser.uid, participantId);
-            let chatData: { lastMessage?: string } | null = null;
-
-            try {
-              const chatDoc = await getDoc(doc(firestore, 'chats', chatId));
-              chatData = chatDoc.exists() ? (chatDoc.data() as { lastMessage?: string }) : null;
-            } catch {
-              chatData = null;
-            }
-
-            return {
-              chatId,
-              matchId: participantId,
-              matchName: matchProfile.fullName || matchProfile.name || 'New match',
-              matchPhotoUrl: matchProfile.photoUrl || '',
-              preview: chatData?.lastMessage || `Start a conversation with ${matchProfile.firstName || matchProfile.name || 'them'}.`,
-              unread: false as boolean,
-            };
-          } catch {
-            return null;
-          }
-        }),
-      );
-
-      if (cancelled) {
-        return;
-      }
-
-      const nextConversations = conversations.filter((conversation): conversation is ChatConversation => conversation !== null);
-      setChatConversations(nextConversations);
-      setChatError('');
-      setSelectedChatId((current) =>
-        current && nextConversations.some((conversation) => conversation.chatId === current)
-          ? current
-          : nextConversations[0]?.chatId || '',
-      );
-    };
-
-    void loadChatConversations().catch(() => {
-      if (!cancelled) {
-        setChatConversations([]);
-        setSelectedChatId('');
-        setChatError('');
-      }
-    });
+    })();
 
     return () => {
       cancelled = true;
+      unsubscribeMessages();
+      unsubscribeConversation();
     };
-  }, [currentUser, profile?.likedUsers, db]);
-
-  useEffect(() => {
-    if (!db || !selectedChatId) {
-      setChatMessages([]);
-      return;
-    }
-
-    setChatLoading(true);
-    setChatError('');
-
-    const unsubscribe = onSnapshot(
-      query(collection(db, 'chats', selectedChatId, 'messages'), orderBy('createdAt', 'asc')),
-      (snapshot) => {
-        const nextMessages = snapshot.docs.map((messageDoc) => {
-          const data = messageDoc.data() as { senderId?: string; text?: string };
-
-          return {
-            id: messageDoc.id,
-            senderId: data.senderId || '',
-            text: data.text || '',
-          };
-        });
-
-        setChatMessages(nextMessages);
-        setChatLoading(false);
-      },
-      () => {
-        setChatMessages([]);
-        setChatLoading(false);
-        setChatError('');
-      },
-    );
-
-    return () => {
-      unsubscribe();
-    };
-  }, [db, selectedChatId]);
+  }, [currentUser, selectedMatchId]);
 
   const resetMessages = () => {
     setError('');
@@ -1093,7 +1159,7 @@ export default function App() {
 
     try {
       if (db) {
-        await setDoc(doc(db, 'users', currentUser.uid), updatedProfile, { merge: true });
+        await setDoc(doc(db, 'users', currentUser.uid), buildFirestoreUserProfile(updatedProfile), { merge: true });
         setFirestoreHealth('connected');
       }
 
@@ -1445,7 +1511,7 @@ export default function App() {
 
       saveLocalProfile(currentUser.uid, nextProfile);
 
-      await setDoc(doc(db, 'users', currentUser.uid), nextProfile, { merge: true });
+      await setDoc(doc(db, 'users', currentUser.uid), buildFirestoreUserProfile(nextProfile), { merge: true });
       setFirestoreHealth('connected');
       await updateProfile(currentUser, {
         displayName: nextProfile.fullName,
@@ -1650,24 +1716,7 @@ export default function App() {
 
     try {
       if (db) {
-        await setDoc(
-          doc(db, 'users', currentUser.uid),
-          {
-            preferences: nextPreferences,
-            gender: updatedProfile.gender,
-            genderPreference: updatedProfile.genderPreference,
-            intentionOpenTo: updatedProfile.intentionOpenTo,
-            ageRange: updatedProfile.ageRange,
-            intention: updatedProfile.intention,
-            bio: updatedProfile.bio,
-            interests: updatedProfile.interests,
-            dateBudget: updatedProfile.dateBudget,
-            dateVibe: updatedProfile.dateVibe,
-            distance: updatedProfile.distance,
-            availability: updatedProfile.availability,
-          },
-          { merge: true },
-        );
+        await setDoc(doc(db, 'users', currentUser.uid), buildFirestoreUserProfile(updatedProfile), { merge: true });
         setFirestoreHealth('connected');
       }
 
@@ -1785,26 +1834,67 @@ export default function App() {
   };
 
   const loadMatchedDaters = async () => {
-    if (!db || !profile?.matches.length) {
+    if (!db || !profile || !currentUser) {
       setMatchedDaters([]);
       return;
     }
 
     const firestore = db;
+    const candidateMatchIds = Array.from(new Set(profile.matches || []));
+
+    if (!candidateMatchIds.length) {
+      setMatchedDaters([]);
+      return;
+    }
 
     const matchDocs = await Promise.all(
-      profile.matches.map(async (matchId) => {
+      candidateMatchIds.map(async (matchId) => {
         const matchDoc = await getDoc(doc(firestore, 'users', matchId));
 
         if (!matchDoc.exists()) {
           return null;
         }
 
-        return profileToDater(normalizeUserProfile(matchDoc.data() as Partial<UserProfile>, matchId));
+        const candidateProfile = normalizeUserProfile(
+          matchDoc.data() as Partial<UserProfile>,
+          matchId,
+        );
+        const isMutualMatch = candidateProfile.matches.includes(currentUser.uid);
+        const wasRecordedMatch = profile.matches.includes(matchId);
+
+        if (!isMutualMatch && !wasRecordedMatch) {
+          return null;
+        }
+
+        return profileToDater(candidateProfile);
       }),
     );
 
-    setMatchedDaters(matchDocs.filter((match): match is Dater => Boolean(match)));
+    const nextMatchedDaters = matchDocs.filter((match): match is Dater => Boolean(match));
+    const nextMatchIds = nextMatchedDaters.map((match) => match.id);
+
+    setMatchedDaters(nextMatchedDaters);
+
+    const existingMatches = profile.matches || [];
+    const hasMatchListChanged =
+      nextMatchIds.length !== existingMatches.length ||
+      nextMatchIds.some((matchId) => !existingMatches.includes(matchId));
+
+    if (hasMatchListChanged) {
+      const syncedProfile = {
+        ...profile,
+        matches: nextMatchIds,
+      };
+
+      setProfile(syncedProfile);
+      saveLocalProfile(currentUser.uid, syncedProfile);
+
+      await setDoc(
+        doc(firestore, 'users', currentUser.uid),
+        { matches: nextMatchIds },
+        { merge: true },
+      );
+    }
   };
 
   const loadLikedDaters = async (currentProfile: UserProfile) => {
@@ -1857,6 +1947,233 @@ export default function App() {
     setLikedDaters(likedCards.filter((card): card is Dater => Boolean(card)));
   };
 
+  const ensureConversationExists = async (leftUserId: string, rightUserId: string) => {
+    if (!db) {
+      return;
+    }
+
+    const conversationId = getConversationId(leftUserId, rightUserId);
+    const conversationRef = doc(db, 'conversations', conversationId);
+
+    // Create or update the conversation first so a denied pre-read cannot block creation.
+    await setDoc(
+      conversationRef,
+      {
+        participants: [leftUserId, rightUserId],
+        createdAt: serverTimestamp(),
+        lastMessage: '',
+        lastMessageAt: serverTimestamp(),
+      },
+      { merge: true },
+    );
+
+    try {
+      const conversationSnap = await getDoc(conversationRef);
+      // console.log('conversation exists after ensure:', conversationSnap.exists());
+      // console.log('conversation data after ensure:', JSON.stringify(conversationSnap.data() || null));
+    } catch (readError) {
+      const code =
+        typeof readError === 'object' &&
+        readError !== null &&
+        'code' in readError
+          ? String((readError as { code?: unknown }).code)
+          : 'unknown';
+      const message =
+        readError instanceof Error
+          ? readError.message
+          : 'Unknown conversation read error';
+      // console.log(`ensureConversationExists read-back failed: (${code}) ${message}`);
+    }
+  };
+
+  const persistChatMessage = async (message: ChatMessage) => {
+    if (!db || !currentUser || !profile || !selectedMatchId) {
+      return;
+    }
+
+    const conversationId = getConversationId(currentUser.uid, selectedMatchId);
+    const conversationRef = doc(db, 'conversations', conversationId);
+    const messageRef = doc(db, 'conversations', conversationId, 'messages', message.id);
+
+    // Temporary debug instrumentation for rules troubleshooting.
+    // console.log('--- sendMessage debug ---');
+    // console.log('senderId:', currentUser.uid);
+    // console.log('conversationId:', conversationId);
+    // console.log('auth uid:', auth?.currentUser?.uid || null);
+
+    const currentUid = auth?.currentUser?.uid || '';
+
+    if (!currentUid) {
+      // console.error('PROBLEM: No authenticated user found');
+      throw new Error('No authenticated user found.');
+    }
+
+    try {
+      const conversationSnap = await getDoc(conversationRef);
+      // console.log('conversation exists:', conversationSnap.exists());
+      // console.log('conversation data:', conversationSnap.data() || null);
+
+      if (!conversationSnap.exists()) {
+        // console.error('PROBLEM: Conversation document does not exist yet!');
+      }
+
+      const participantsRaw = conversationSnap.data()?.participants;
+      const participants = Array.isArray(participantsRaw)
+        ? participantsRaw.map((entry) => String(entry))
+        : [];
+
+      // console.log('participants:', participants);
+      // console.log('current user in participants:', participants.includes(currentUid));
+    } catch (conversationReadError) {
+      const code =
+        typeof conversationReadError === 'object' &&
+        conversationReadError !== null &&
+        'code' in conversationReadError
+          ? String((conversationReadError as { code?: unknown }).code)
+          : 'unknown';
+      const message =
+        conversationReadError instanceof Error
+          ? conversationReadError.message
+          : 'Unknown conversation read error';
+      // console.error(`PROBLEM: Conversation read blocked before send. (${code}) ${message}`);
+    }
+
+    const batch = writeBatch(db);
+
+    batch.set(
+      conversationRef,
+      {
+        participants: [currentUser.uid, selectedMatchId],
+        updatedAt: serverTimestamp(),
+        lastMessage: message.text,
+        lastMessageSenderId: currentUser.uid,
+        lastMessageSenderName: message.senderName,
+        lastMessageAt: serverTimestamp(),
+      },
+      { merge: true },
+    );
+
+    batch.set(messageRef, {
+      senderId: currentUser.uid,
+      senderName: message.senderName,
+      text: message.text,
+      sentAt: message.sentAt,
+      createdAt: serverTimestamp(),
+      type: 'text',
+    });
+
+    // console.log('attempting batch commit for conversation + message');
+    await batch.commit();
+    // console.log('batch commit succeeded');
+  };
+
+  const handleSendChatMessage = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    if (!db || !currentUser || !profile || !selectedMatchId) {
+      return;
+    }
+
+    if (!matchedDaters.some((dater) => dater.id === selectedMatchId)) {
+      setChatError('You can only message someone after you both match.');
+      return;
+    }
+
+    const messageText = chatDraft.trim();
+
+    if (!messageText) {
+      return;
+    }
+
+    setChatError('');
+    const senderName = profile.fullName || currentUser.displayName || 'User';
+    const optimisticMessage: ChatMessage = {
+      id: doc(collection(db, 'conversations', getConversationId(currentUser.uid, selectedMatchId), 'messages')).id,
+      senderId: currentUser.uid,
+      senderName,
+      text: messageText,
+      sentAt: Date.now(),
+      status: 'pending',
+    };
+
+    setChatDraft('');
+    setChatMessages((current) => mergeChatMessages(current, [optimisticMessage]));
+
+    try {
+      await ensureConversationExists(currentUser.uid, selectedMatchId);
+      await persistChatMessage(optimisticMessage);
+
+      setChatMessages((current) =>
+        current.map((entry) =>
+          entry.id === optimisticMessage.id ? { ...entry, status: 'sent' } : entry,
+        ),
+      );
+    } catch (sendError) {
+      const code =
+        typeof sendError === 'object' &&
+        sendError !== null &&
+        'code' in sendError
+          ? String((sendError as { code?: unknown }).code)
+          : 'unknown';
+      const errorMessage =
+        sendError instanceof Error
+          ? sendError.message
+          : 'Unknown send error';
+
+      setChatMessages((current) =>
+        current.map((entry) =>
+          entry.id === optimisticMessage.id ? { ...entry, status: 'failed' } : entry,
+        ),
+      );
+      setChatDraft(messageText);
+      setChatError(`Unable to send message. (${code}) ${errorMessage}`);
+    }
+  };
+
+  const handleRetryChatMessage = async (message: ChatMessage) => {
+    if (!db || !currentUser || !profile || !selectedMatchId) {
+      return;
+    }
+
+    setChatError('');
+    setChatMessages((current) =>
+      current.map((entry) =>
+        entry.id === message.id ? { ...entry, status: 'pending' } : entry,
+      ),
+    );
+
+    try {
+      await persistChatMessage({
+        ...message,
+        status: 'pending',
+      });
+
+      setChatMessages((current) =>
+        current.map((entry) =>
+          entry.id === message.id ? { ...entry, status: 'sent' } : entry,
+        ),
+      );
+    } catch (retryError) {
+      const code =
+        typeof retryError === 'object' &&
+        retryError !== null &&
+        'code' in retryError
+          ? String((retryError as { code?: unknown }).code)
+          : 'unknown';
+      const errorMessage =
+        retryError instanceof Error
+          ? retryError.message
+          : 'Unknown send error';
+
+      setChatMessages((current) =>
+        current.map((entry) =>
+          entry.id === message.id ? { ...entry, status: 'failed' } : entry,
+        ),
+      );
+      setChatError(`Unable to send message. (${code}) ${errorMessage}`);
+    }
+  };
+
   const handleSignOut = async () => {
     if (!auth) {
       return;
@@ -1869,88 +2186,10 @@ export default function App() {
     setLikedDaters([]);
     setMatchesModalOpen(false);
     setMatchedDaters([]);
-  };
-
-  const sendPlannerMessage = async (rawPrompt: string) => {
-    const trimmedPrompt = rawPrompt.trim();
-
-    if (!trimmedPrompt || plannerLoading) {
-      return;
-    }
-
-    const nextMessages = [...plannerMessages, { role: 'user' as const, text: trimmedPrompt }];
-    setPlannerMessages(nextMessages);
-    setPlannerInput('');
-    setPlannerError('');
-    setPlannerLoading(true);
-
-    try {
-      const reply = await generatePlannerReply(nextMessages, profile || undefined);
-      setPlannerMessages((current) => [...current, { role: 'assistant', text: reply }]);
-    } catch (plannerRequestError) {
-      setPlannerError(
-        plannerRequestError instanceof Error
-          ? plannerRequestError.message
-          : 'The planner could not respond right now.',
-      );
-    } finally {
-      setPlannerLoading(false);
-    }
-  };
-
-  const handlePlannerSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    await sendPlannerMessage(plannerInput);
-  };
-
-  const handlePlannerPromptClick = async (prompt: string) => {
-    setPlannerInput(prompt);
-    await sendPlannerMessage(prompt);
-  };
-
-  const handleSendChatMessage = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-
-    if (!db || !currentUser || !selectedChatId || !chatInput.trim()) {
-      return;
-    }
-
-    const text = chatInput.trim();
-    const selectedConversation = chatConversations.find(
-      (conversation) => conversation.chatId === selectedChatId,
-    );
-
-    setChatInput('');
+    setSelectedMatchId('');
+    setChatDraft('');
+    setChatMessages([]);
     setChatError('');
-
-    try {
-      await addDoc(collection(db, 'chats', selectedChatId, 'messages'), {
-        senderId: currentUser.uid,
-        text,
-        createdAt: serverTimestamp(),
-      });
-
-      await setDoc(
-        doc(db, 'chats', selectedChatId),
-        {
-          participants: [currentUser.uid, selectedConversation?.matchId].filter(Boolean),
-          lastMessage: text,
-          lastMessageAt: serverTimestamp(),
-        },
-        { merge: true },
-      );
-
-      setChatConversations((current) =>
-        current.map((conversation) =>
-          conversation.chatId === selectedChatId
-            ? { ...conversation, preview: text }
-            : conversation,
-        ),
-      );
-    } catch {
-      setChatInput(text);
-      setChatError('Unable to send your message right now.');
-    }
   };
 
   const renderFrame = (content: ReactNode) => (
@@ -2084,97 +2323,109 @@ export default function App() {
     }
 
     if (activeTab === 'chats') {
-      const selectedConversation = chatConversations.find(
-        (conversation) => conversation.chatId === selectedChatId,
-      );
+      const selectedMatch = matchedDaters.find((dater) => dater.id === selectedMatchId) || null;
+
+      if (!selectedMatch) {
+        return (
+          <section className="home-grid">
+            {matchedDaters.length ? (
+              matchedDaters.map((dater) => (
+                <article
+                  key={dater.id}
+                  className="chat-match-row"
+                  onClick={() => {
+                    setChatError('');
+                    setSelectedMatchId(dater.id);
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      setChatError('');
+                      setSelectedMatchId(dater.id);
+                    }
+                  }}
+                  role="button"
+                  tabIndex={0}
+                >
+                  <div className="profile-circle-mini" />
+                  <div className="chat-text-meta">
+                    <h3 className="chat-name">{dater.name}</h3>
+                    <p className="chat-preview">Open conversation</p>
+                  </div>
+                </article>
+              ))
+            ) : (
+              <p className="account-detail">No mutual matches yet. Chats appear once both users like each other.</p>
+            )}
+          </section>
+        );
+      }
 
       return (
-        <>
-          <p className="account-detail">Chat with people you've liked and anyone already messaging you.</p>
-          {chatError ? <p className="planner-error-text">{chatError}</p> : null}
-          {!chatConversations.length ? (
-            <section className="home-grid">
-              <article className="home-tile">
-                <h3>No chats yet</h3>
-                <p>Like someone to start a conversation, or wait for an incoming message to appear here.</p>
-              </article>
-            </section>
-          ) : (
-            <>
-              <section className="home-grid chat-list">
-                {chatConversations.map((conversation) => (
-                  <button
-                    key={conversation.chatId}
-                    className={
-                      selectedChatId === conversation.chatId
-                        ? 'chat-match-row unread chat-match-button selected-chat'
-                        : conversation.unread
-                          ? 'chat-match-row unread chat-match-button'
-                          : 'chat-match-row chat-match-button'
-                    }
-                    type="button"
-                    onClick={() => setSelectedChatId(conversation.chatId)}
-                  >
-                    {conversation.matchPhotoUrl ? (
-                      <img
-                        src={conversation.matchPhotoUrl}
-                        alt={conversation.matchName}
-                        className="profile-circle-mini profile-circle-mini-image"
-                      />
-                    ) : (
-                      <div className="profile-circle-mini" />
-                    )}
-                    <div className="chat-text-meta">
-                      <h3 className="chat-name">{conversation.matchName}</h3>
-                      <p className="chat-preview">{conversation.preview}</p>
-                    </div>
-                  </button>
-                ))}
-              </section>
+        <section className="chat">
+          <div className="chat-thread-top">
+            <button className="chat-back-link" type="button" onClick={() => {
+              setChatError('');
+              setSelectedMatchId('');
+            }}>
+              <img src={backArrrow} alt="Back" className="chat-back-icon" />
+              <span>Back to matches</span>
+            </button>
+            <h3 className="chat-thread-name">{selectedMatch.name}</h3>
+          </div>
+          <div className="chat-section">
+            {chatMessages.length ? (
+              chatMessages.map((message) => {
+                const isCurrentUserMessage = message.senderId === currentUser?.uid;
+                const otherUserReadAt = selectedMatch ? conversationReadBy[selectedMatch.id] || 0 : 0;
+                const messageStatus = isCurrentUserMessage
+                  ? otherUserReadAt >= message.sentAt
+                    ? 'Viewed'
+                    : 'Sent'
+                  : '';
+                const timeLabel = formatChatTime(message.sentAt);
 
-              <section className="chat user-chat-panel">
-                <div className="chat-panel-header">
-                  <h3>{selectedConversation?.matchName || 'Select a match'}</h3>
-                  <p>{selectedConversation ? 'Start the conversation.' : 'Choose a match above.'}</p>
-                </div>
-                <div className="chat-section planner-chat-section" ref={userChatRef}>
-                  {chatMessages.length ? (
-                    chatMessages.map((message) => (
-                      <div
-                        key={message.id}
-                        className={
-                          message.senderId === currentUser?.uid ? 'message-from-user' : 'message-from-other'
-                        }
-                      >
-                        <p>{message.text}</p>
-                      </div>
-                    ))
-                  ) : (
-                    <div className="message-from-other">
-                      <p>Say hi and start planning something fun together.</p>
-                    </div>
-                  )}
-                </div>
-                <form className="chat-input" onSubmit={handleSendChatMessage}>
-                  <input
-                    type="text"
-                    placeholder={selectedConversation ? `Message ${selectedConversation.matchName}...` : 'Select a chat first'}
-                    value={chatInput}
-                    onChange={(event) => setChatInput(event.target.value)}
-                    disabled={!selectedConversation || chatLoading}
-                  />
-                  <button
-                    className="submit-button"
-                    type="submit"
-                    disabled={!selectedConversation || chatLoading || !chatInput.trim()}
+                return (
+                  <div
+                    key={message.id}
+                    className={isCurrentUserMessage ? 'message-from-user' : 'message-from-other'}
+                    data-status={message.status || ''}
                   >
-                    <img src={submitImg} alt="Send" className="send-icon" />
-                  </button>
-                </form>
-              </section>
-            </>
-          )}
-        </>
+                    <p>{message.text}</p>
+                    <span className="chat-message-meta">
+                      {timeLabel}
+                      {messageStatus ? ` • ${messageStatus}` : ''}
+                      {message.status === 'failed' ? ' • Failed' : ''}
+                    </span>
+                    {isCurrentUserMessage && message.status === 'failed' ? (
+                      <button
+                        className="chat-retry-button"
+                        type="button"
+                        onClick={() => handleRetryChatMessage(message)}
+                      >
+                        Retry
+                      </button>
+                    ) : null}
+                  </div>
+                );
+              })
+            ) : (
+              <p className="account-detail">No messages yet. Say hi.</p>
+            )}
+          </div>
+
+          <form className="chat-input" onSubmit={handleSendChatMessage}>
+            <input
+              type="text"
+              value={chatDraft}
+              onChange={(event) => setChatDraft(event.target.value)}
+              placeholder={`Message ${selectedMatch.name}`}
+            />
+            <button className="submit-button" type="submit" disabled={!chatDraft.trim()}>
+              <img src={submitImg} alt="Send" className="send-icon" />
+            </button>
+          </form>
+          {chatError ? <p className="error-text chat-error-line">{chatError}</p> : null}
+        </section>
       );
     }
 
@@ -2248,7 +2499,7 @@ export default function App() {
                 }}
                 type="button"
               >
-                View Matches ({profile?.matches.length || 0})
+                View Matches ({matchedDaters.length})
               </button>
               <button className="secondary-button tile-button" onClick={handleSignOut} type="button">
                 Sign Out
@@ -2319,42 +2570,75 @@ export default function App() {
 
       if (db && discoveryFeedSource === 'firestore') {
         try {
-          const likedUserRef = doc(db, 'users', currentDater.id);
-          const likedUserSnap = await getDoc(likedUserRef);
+          const likedUserSnap = await getDoc(doc(db, 'users', currentDater.id));
           const likedUserProfile = likedUserSnap.exists()
             ? normalizeUserProfile(likedUserSnap.data() as Partial<UserProfile>, currentDater.id)
             : null;
           const matchedBack = !!likedUserProfile?.likedUsers.includes(currentUser.uid);
+          const conversationId = getConversationId(currentUser.uid, currentDater.id);
 
           const nextMatches = matchedBack
             ? Array.from(new Set([...(profile.matches || []), currentDater.id]))
             : profile.matches || [];
-          const nextLikedUserMatches = matchedBack && likedUserProfile
+          const nextConversations = matchedBack
+            ? {
+                ...(profile.conversations || {}),
+                [currentDater.id]: conversationId,
+              }
+            : (profile.conversations || {});
+
+          const likedUserMatches = matchedBack && likedUserProfile
             ? Array.from(new Set([...(likedUserProfile.matches || []), currentUser.uid]))
             : likedUserProfile?.matches || [];
+          const likedUserConversations = matchedBack && likedUserProfile
+            ? {
+                ...(likedUserProfile.conversations || {}),
+                [currentUser.uid]: conversationId,
+              }
+            : (likedUserProfile?.conversations || {});
 
-          if (currentUserRef) {
-            await setDoc(
+          if (matchedBack && currentUserRef && likedUserSnap.exists()) {
+            const likedUserRef = doc(db, 'users', currentDater.id);
+            const conversationRef = doc(db, 'conversations', conversationId);
+            const batch = writeBatch(db);
+
+            batch.set(
               currentUserRef,
-              { likedUsers: nextLikedUserIds, matches: nextMatches },
+              {
+                likedUsers: nextLikedUserIds,
+                matches: nextMatches,
+                conversations: nextConversations,
+              },
               { merge: true },
             );
-          }
-
-          if (matchedBack) {
-            await setDoc(
+            batch.set(
               likedUserRef,
-              { matches: nextLikedUserMatches },
+              {
+                matches: likedUserMatches,
+                conversations: likedUserConversations,
+              },
               { merge: true },
             );
+            batch.set(conversationRef, buildConversationPayload(currentUser.uid, currentDater.id), { merge: true });
 
-            const matchedProfile = { ...nextProfile, matches: nextMatches };
+            await batch.commit();
+
+            const matchedProfile = {
+              ...nextProfile,
+              matches: nextMatches,
+              conversations: nextConversations,
+            };
             setProfile(matchedProfile);
             saveLocalProfile(currentUser.uid, matchedProfile);
-            // Future Gemini integration: use both users' shared interests/dateVibe
-            // to generate a date plan once matching chat/planner is connected.
             setStatus('It\'s a match!');
+          } else if (currentUserRef) {
+            await setDoc(
+              currentUserRef,
+              { likedUsers: nextLikedUserIds },
+              { merge: true },
+            );
           }
+
         } catch {
           if (currentUserRef) {
             await setDoc(currentUserRef, { likedUsers: nextLikedUserIds }, { merge: true });
