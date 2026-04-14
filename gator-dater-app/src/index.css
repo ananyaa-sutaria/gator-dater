@@ -324,8 +324,10 @@ button:active {
 
 .auth-form input::placeholder,
 .auth-form select::placeholder,
-.auth-form textarea::placeholder {
+.auth-form textarea::placeholder,
+.chat input::placeholder {
   color: var(--color-lightPink);
+  font-family: 'zilla slab', serif;
 }
 
 .auth-form input:focus,
