@@ -21,6 +21,7 @@ import {
   query,
   serverTimestamp,
   setDoc,
+  where,
 } from 'firebase/firestore';
 import { auth, db, isFirebaseConfigured } from './firebase';
 import gatorImage from '../assets/PLEASE REPLACE.png';
@@ -860,7 +861,7 @@ export default function App() {
   }, [chatMessages, chatLoading]);
 
   useEffect(() => {
-    if (!currentUser || !profile?.matches.length || !db) {
+    if (!currentUser || !db) {
       setChatConversations([]);
       setSelectedChatId('');
       return;
@@ -870,27 +871,62 @@ export default function App() {
     let cancelled = false;
 
     const loadChatConversations = async () => {
-      const conversations = await Promise.all(
-        profile.matches.map(async (matchId) => {
-          const matchDoc = await getDoc(doc(firestore, 'users', matchId));
+      const chatParticipantIds = new Set(profile?.likedUsers || []);
+      try {
+        const existingChatsSnapshot = await getDocs(
+          query(collection(firestore, 'chats'), where('participants', 'array-contains', currentUser.uid)),
+        );
 
-          if (!matchDoc.exists()) {
+        existingChatsSnapshot.docs.forEach((chatDoc) => {
+          const chatData = chatDoc.data() as { participants?: string[] };
+          chatData.participants?.forEach((participantId) => {
+            if (participantId !== currentUser.uid) {
+              chatParticipantIds.add(participantId);
+            }
+          });
+        });
+      } catch {
+        // Fall back to the people this user has liked when chat collection queries are restricted.
+      }
+
+      if (!chatParticipantIds.size) {
+        setChatConversations([]);
+        setSelectedChatId('');
+        setChatError('');
+        return;
+      }
+
+      const conversations = await Promise.all(
+        Array.from(chatParticipantIds).map(async (participantId) => {
+          try {
+            const matchDoc = await getDoc(doc(firestore, 'users', participantId));
+
+            if (!matchDoc.exists()) {
+              return null;
+            }
+
+            const matchProfile = normalizeUserProfile(matchDoc.data() as Partial<UserProfile>, participantId);
+            const chatId = getChatId(currentUser.uid, participantId);
+            let chatData: { lastMessage?: string } | null = null;
+
+            try {
+              const chatDoc = await getDoc(doc(firestore, 'chats', chatId));
+              chatData = chatDoc.exists() ? (chatDoc.data() as { lastMessage?: string }) : null;
+            } catch {
+              chatData = null;
+            }
+
+            return {
+              chatId,
+              matchId: participantId,
+              matchName: matchProfile.fullName || matchProfile.name || 'New match',
+              matchPhotoUrl: matchProfile.photoUrl || '',
+              preview: chatData?.lastMessage || `Start a conversation with ${matchProfile.firstName || matchProfile.name || 'them'}.`,
+              unread: false as boolean,
+            };
+          } catch {
             return null;
           }
-
-          const matchProfile = normalizeUserProfile(matchDoc.data() as Partial<UserProfile>, matchId);
-          const chatId = getChatId(currentUser.uid, matchId);
-          const chatDoc = await getDoc(doc(firestore, 'chats', chatId));
-          const chatData = chatDoc.exists() ? (chatDoc.data() as { lastMessage?: string }) : null;
-
-          return {
-            chatId,
-            matchId,
-            matchName: matchProfile.fullName || matchProfile.name || 'New match',
-            matchPhotoUrl: matchProfile.photoUrl || '',
-            preview: chatData?.lastMessage || `You matched with ${matchProfile.firstName || matchProfile.name || 'someone'}!`,
-            unread: false as boolean,
-          };
         }),
       );
 
@@ -900,6 +936,7 @@ export default function App() {
 
       const nextConversations = conversations.filter((conversation): conversation is ChatConversation => conversation !== null);
       setChatConversations(nextConversations);
+      setChatError('');
       setSelectedChatId((current) =>
         current && nextConversations.some((conversation) => conversation.chatId === current)
           ? current
@@ -909,14 +946,16 @@ export default function App() {
 
     void loadChatConversations().catch(() => {
       if (!cancelled) {
-        setChatError('Unable to load chats right now.');
+        setChatConversations([]);
+        setSelectedChatId('');
+        setChatError('');
       }
     });
 
     return () => {
       cancelled = true;
     };
-  }, [currentUser, profile?.matches, db]);
+  }, [currentUser, profile?.likedUsers, db]);
 
   useEffect(() => {
     if (!db || !selectedChatId) {
@@ -944,8 +983,9 @@ export default function App() {
         setChatLoading(false);
       },
       () => {
+        setChatMessages([]);
         setChatLoading(false);
-        setChatError('Unable to sync messages right now.');
+        setChatError('');
       },
     );
 
@@ -2050,13 +2090,13 @@ export default function App() {
 
       return (
         <>
-          <p className="account-detail">Chat with your mutual matches here.</p>
+          <p className="account-detail">Chat with people you've liked and anyone already messaging you.</p>
           {chatError ? <p className="planner-error-text">{chatError}</p> : null}
-          {!profile?.matches.length ? (
+          {!chatConversations.length ? (
             <section className="home-grid">
               <article className="home-tile">
                 <h3>No chats yet</h3>
-                <p>When two users like each other, their conversation will appear here.</p>
+                <p>Like someone to start a conversation, or wait for an incoming message to appear here.</p>
               </article>
             </section>
           ) : (
