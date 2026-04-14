@@ -866,6 +866,43 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (!db || !currentUser) {
+      return;
+    }
+
+    const userRef = doc(db, 'users', currentUser.uid);
+
+    return onSnapshot(
+      userRef,
+      (snapshot) => {
+        if (!snapshot.exists()) {
+          return;
+        }
+
+        const liveProfile = normalizeUserProfile(
+          snapshot.data() as Partial<UserProfile>,
+          currentUser.uid,
+        );
+
+        setFirestoreHealth('connected');
+        saveLocalProfile(currentUser.uid, liveProfile);
+        setProfile((current) => {
+          if (!current) {
+            return liveProfile;
+          }
+
+          return JSON.stringify(current) === JSON.stringify(liveProfile)
+            ? current
+            : liveProfile;
+        });
+      },
+      () => {
+        setFirestoreHealth('fallback');
+      },
+    );
+  }, [currentUser]);
+
+  useEffect(() => {
     if (!currentUser || !profile || screen !== 'home') {
       return;
     }
@@ -1827,7 +1864,9 @@ export default function App() {
     }
 
     const firestore = db;
-    const candidateMatchIds = Array.from(new Set(profile.matches || []));
+    const candidateMatchIds = Array.from(
+      new Set([...(profile.matches || []), ...(profile.likedUsers || [])]),
+    );
 
     if (!candidateMatchIds.length) {
       setMatchedDaters([]);
@@ -1846,14 +1885,18 @@ export default function App() {
           matchDoc.data() as Partial<UserProfile>,
           matchId,
         );
-        const isMutualMatch = candidateProfile.matches.includes(currentUser.uid);
+        const isMutualLike = candidateProfile.likedUsers.includes(currentUser.uid);
+        const isMutualMatch = candidateProfile.matches.includes(currentUser.uid) || isMutualLike;
         const wasRecordedMatch = profile.matches.includes(matchId);
 
         if (!isMutualMatch && !wasRecordedMatch) {
           return null;
         }
 
-        return profileToDater(candidateProfile);
+        return {
+          ...profileToDater(candidateProfile),
+          compatibility: compareProfilesByPreferences(profile, candidateProfile),
+        };
       }),
     );
 
@@ -1899,6 +1942,10 @@ export default function App() {
 
     const likedCards = await Promise.all(
       currentProfile.likedUsers.map(async (likedUserId) => {
+        if (currentProfile.matches.includes(likedUserId)) {
+          return null;
+        }
+
         if (db) {
           try {
             const likedUserDoc = await getDoc(doc(db, 'users', likedUserId));
@@ -1908,6 +1955,11 @@ export default function App() {
                 likedUserDoc.data() as Partial<UserProfile>,
                 likedUserId,
               );
+
+              if (likedProfile.likedUsers.includes(currentProfile.uid)) {
+                return null;
+              }
+
               return {
                 ...profileToDater(likedProfile),
                 compatibility: compareProfilesByPreferences(currentProfile, likedProfile),
@@ -2524,6 +2576,8 @@ export default function App() {
       ? profile.likedUsers
       : [...(profile?.likedUsers || []), currentDater.id];
 
+    let matchedOnThisLike = false;
+
     if (currentUser && profile) {
       const currentUserRef = db ? doc(db, 'users', currentUser.uid) : null;
       const nextProfile = { ...profile, likedUsers: nextLikedUserIds };
@@ -2592,6 +2646,12 @@ export default function App() {
             };
             setProfile(matchedProfile);
             saveLocalProfile(currentUser.uid, matchedProfile);
+            setMatchedDaters((current) =>
+              current.some((dater) => dater.id === currentDater.id)
+                ? current
+                : [currentDater, ...current],
+            );
+            matchedOnThisLike = true;
             setStatus('It\'s a match!');
           } else if (currentUserRef) {
             await setDoc(
@@ -2614,9 +2674,11 @@ export default function App() {
     }
 
     setLikedDaters((current) =>
-      current.some((dater) => dater.id === currentDater.id)
-        ? current
-        : [...current, currentDater],
+      matchedOnThisLike
+        ? current.filter((dater) => dater.id !== currentDater.id)
+        : current.some((dater) => dater.id === currentDater.id)
+          ? current
+          : [...current, currentDater],
     );
     setSwipeIndex((current) => current + 1);
   };
