@@ -88,7 +88,10 @@ type ChatConversation = {
 type ChatMessage = {
   id: string;
   senderId: string;
+  senderName: string;
   text: string;
+  sentAt: number;
+  status?: 'pending' | 'sent' | 'failed';
 };
 
 type PlannerPrompt = {
@@ -179,15 +182,6 @@ type UserProfile = {
   conversations?: Record<string, string>;
   onboardingCompleted: boolean;
   createdAt?: unknown;
-};
-
-type ChatMessage = {
-  id: string;
-  senderId: string;
-  senderName: string;
-  text: string;
-  sentAt: number;
-  status?: 'pending' | 'sent' | 'failed';
 };
 
 const initialSignUp: SignUpState = {
@@ -808,6 +802,38 @@ const formatChatTime = (timestamp: number) => {
   });
 };
 
+const plannerGreeting =
+  'Tell me the kind of date you want, and I will suggest a few Gainesville-friendly ideas.';
+
+const buildPlannerPrompts = (profile: UserProfile | null): PlannerPrompt[] => {
+  const interestPair = profile?.interests?.slice(0, 2).join(' and ');
+
+  return [
+    {
+      id: 'coffee',
+      label: 'Low-key first date',
+      prompt: 'Plan a casual first date near campus with coffee or dessert and a simple conversation-friendly activity.',
+    },
+    {
+      id: 'budget',
+      label: 'Budget-friendly night',
+      prompt: 'Give me 3 affordable Gainesville date ideas for this week that feel thoughtful, not boring.',
+    },
+    {
+      id: 'outdoors',
+      label: 'Outside plan',
+      prompt: 'Suggest an outdoor date in Gainesville with a backup option in case it rains.',
+    },
+    {
+      id: 'personalized',
+      label: 'Match my vibe',
+      prompt: interestPair
+        ? `Plan a Gainesville date that fits someone into ${interestPair}, with a realistic student budget and an easy first message to send.`
+        : 'Plan a Gainesville date idea that feels fun, safe, and easy for two UF students to say yes to.',
+    },
+  ];
+};
+
 export default function App() {
   const [screen, setScreen] = useState<Screen>('intro');
   const [signUp, setSignUp] = useState<SignUpState>(initialSignUp);
@@ -840,15 +866,53 @@ export default function App() {
   const [plannerInput, setPlannerInput] = useState('');
   const [plannerLoading, setPlannerLoading] = useState(false);
   const [plannerError, setPlannerError] = useState('');
-  const [chatConversations, setChatConversations] = useState<ChatConversation[]>([]);
-  const [selectedChatId, setSelectedChatId] = useState('');
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
-  const [chatInput, setChatInput] = useState('');
-  const [chatLoading, setChatLoading] = useState(false);
-  const [chatError, setChatError] = useState('');
   const profilePhotoInputRef = useRef<HTMLInputElement | null>(null);
   const plannerChatRef = useRef<HTMLDivElement | null>(null);
   const userChatRef = useRef<HTMLDivElement | null>(null);
+
+  const submitPlannerMessage = async (rawInput: string) => {
+    const messageText = rawInput.trim();
+
+    if (!messageText || plannerLoading) {
+      return;
+    }
+
+    const nextMessages: PlannerChatMessage[] = [
+      ...plannerMessages,
+      { role: 'user', text: messageText },
+    ];
+
+    setPlannerMessages(nextMessages);
+    setPlannerInput('');
+    setPlannerError('');
+    setPlannerLoading(true);
+
+    try {
+      const reply = await generatePlannerReply(nextMessages, profile || undefined);
+
+      setPlannerMessages([
+        ...nextMessages,
+        { role: 'assistant', text: reply },
+      ]);
+    } catch (plannerReplyError) {
+      setPlannerError(
+        plannerReplyError instanceof Error
+          ? plannerReplyError.message
+          : 'Unable to generate date ideas right now.',
+      );
+    } finally {
+      setPlannerLoading(false);
+    }
+  };
+
+  const handlePlannerPromptClick = async (promptText: string) => {
+    await submitPlannerMessage(promptText);
+  };
+
+  const handlePlannerSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    await submitPlannerMessage(plannerInput);
+  };
 
   useEffect(() => {
     if (!auth) {
