@@ -680,10 +680,56 @@ hr {
   height: 100%;
 }
 
+.chat-thread-top {
+  display: grid;
+  gap: 0.9cqh;
+  justify-items: start;
+}
+
+.chat-back-link {
+  background: transparent !important;
+  border: none !important;
+  padding: 0 !important;
+  margin: 0;
+  width: auto !important;
+  height: auto !important;
+  display: inline-flex !important;
+  align-items: center;
+  gap: 1.2cqw;
+  color: #9a6b84 !important;
+  font-family: 'Zilla Slab', serif;
+  font-size: 3.8cqw;
+  font-weight: 400;
+  cursor: pointer;
+  align-self: flex-start;
+  justify-self: start;
+  text-align: left;
+}
+
+.chat-back-icon {
+  width: 4cqw;
+  height: 4cqw;
+  object-fit: contain;
+}
+
+.chat-thread-name {
+  font-family: 'Yellowtail', cursive;
+  font-size: 6.4cqw;
+  line-height: 1;
+  color: black;
+  margin: 0;
+  width: 100%;
+  justify-self: center;
+  text-align: center;
+}
+
 .chat-section {
   display: flex;
   flex-direction: column;
   gap: 1cqh;
+  flex: 1;
+  overflow-y: auto;
+  padding-right: 1cqw;
 }
 
 .message-from-other {
@@ -704,9 +750,38 @@ hr {
   max-width: 80%;
 }
 
+.message-from-user[data-status='pending'] {
+  opacity: 0.72;
+}
+
+.message-from-user[data-status='failed'] {
+  outline: 2px solid #b42318;
+}
+
 .message-from-other p,
 .message-from-user p {
   color: black;
+}
+
+.chat-message-meta {
+  display: block;
+  margin-top: 0.4cqh;
+  font-size: 3cqw;
+  color: #6a5f66;
+}
+
+.chat-retry-button {
+  background: transparent !important;
+  border: none !important;
+  padding: 0;
+  margin-top: 0.4cqh;
+  width: auto !important;
+  height: auto !important;
+  color: var(--color-darkPink) !important;
+  font-size: 3.2cqw;
+  text-decoration: underline;
+  font-weight: 400;
+  align-self: flex-end;
 }
 
 .chat-input {
@@ -882,6 +957,10 @@ input:focus {
 
 .error-text {
   color: #b42318;
+}
+
+.chat-error-line {
+  margin-top: 0.5cqh;
 }
 
 .warning {
