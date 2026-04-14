@@ -9,8 +9,10 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "firebase": "^12.9.0",
+    "@tailwindcss/vite": "^4.2.2",
+    "firebase": "^12.11.0",
     "react": "^19.1.0",
+    "react-calendar": "^6.0.1",
     "react-dom": "^19.1.0"
   },
   "devDependencies": {

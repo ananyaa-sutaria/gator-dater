@@ -40,6 +40,9 @@ import searchIcon from '../assets/searchIcon.png';
 import submitIcon from '../assets/submitIcon.png';
 import { generatePlannerReply, isGeminiConfigured, type PlannerChatMessage } from './gemini';
 import './index.css';
+//calendar stuff
+import 'react-calendar/dist/Calendar.css';
+import Calendar from 'react-calendar';
 
 const gatorImg = gatorImage;
 const heartImg = heartIcon;
@@ -867,52 +870,11 @@ export default function App() {
   const [plannerLoading, setPlannerLoading] = useState(false);
   const [plannerError, setPlannerError] = useState('');
   const profilePhotoInputRef = useRef<HTMLInputElement | null>(null);
-  const plannerChatRef = useRef<HTMLDivElement | null>(null);
-  const userChatRef = useRef<HTMLDivElement | null>(null);
-
-  const submitPlannerMessage = async (rawInput: string) => {
-    const messageText = rawInput.trim();
-
-    if (!messageText || plannerLoading) {
-      return;
-    }
-
-    const nextMessages: PlannerChatMessage[] = [
-      ...plannerMessages,
-      { role: 'user', text: messageText },
-    ];
-
-    setPlannerMessages(nextMessages);
-    setPlannerInput('');
-    setPlannerError('');
-    setPlannerLoading(true);
-
-    try {
-      const reply = await generatePlannerReply(nextMessages, profile || undefined);
-
-      setPlannerMessages([
-        ...nextMessages,
-        { role: 'assistant', text: reply },
-      ]);
-    } catch (plannerReplyError) {
-      setPlannerError(
-        plannerReplyError instanceof Error
-          ? plannerReplyError.message
-          : 'Unable to generate date ideas right now.',
-      );
-    } finally {
-      setPlannerLoading(false);
-    }
-  };
-
-  const handlePlannerPromptClick = async (promptText: string) => {
-    await submitPlannerMessage(promptText);
-  };
-
-  const handlePlannerSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    await submitPlannerMessage(plannerInput);
-  };
+  //hehe calendar
+  type ValuePiece = Date | null;
+  type Value = ValuePiece | [ValuePiece, ValuePiece];
+  const [calendarValue, setCalendarValue] = useState<Value>(new Date());
+  const profilePhotoFileRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     if (!auth) {
@@ -2307,7 +2269,10 @@ export default function App() {
         <>
           <section className="calendar">
             <h2>Calendar</h2>
-            <div className="calendar-grid">
+            
+            <div>
+               {/* className="calendar-grid"> */}
+               <Calendar onChange={setCalendarValue} value={calendarValue}/>
             </div>
           </section>
 
