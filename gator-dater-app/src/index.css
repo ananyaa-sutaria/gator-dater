@@ -797,6 +797,11 @@ hr {
   padding-right: 0.75cqw;
 }
 
+.planner-response-message {
+  max-width: 100%;
+  width: 100%;
+}
+
 .message-from-other {
   align-self: flex-start;
   background: var(--color-lightBlue);
@@ -828,6 +833,34 @@ hr {
   color: black;
   margin: 0;
   white-space: pre-wrap;
+}
+
+.planner-option-list {
+  display: grid;
+  gap: 1cqh;
+  margin-top: 1cqh;
+}
+
+.planner-date-block {
+  display: grid;
+  gap: 0.75cqh;
+}
+
+.planner-calendar-save {
+  display: grid;
+  gap: 0.75cqh;
+  margin-top: 0.5cqh;
+}
+
+.planner-calendar-save input {
+  height: 12.7cqw;
+  width: 100%;
+  padding: 1.4cqh 3.25cqw;
+  border-radius: 2.54cqw;
+  border: 1px solid var(--color-pink);
+  background: #fff;
+  color: var(--color-blackPink);
+  font-family: 'Zilla Slab', serif;
 }
 
 .chat-message-meta {
