@@ -600,6 +600,16 @@ hr {
   min-width: 0;
 }
 
+.chat-match-button {
+  border: none;
+  cursor: pointer;
+  text-align: left;
+}
+
+.selected-chat {
+  box-shadow: 0 0 0 2px rgba(223, 102, 158, 0.35);
+}
+
 .chat-match-row.unread {
   background: var(--color-whitePink);
   outline: 2px solid var(--color-pink);
@@ -611,6 +621,10 @@ hr {
   background: #D9D9D9;
   border-radius: 9999px;
   flex-shrink: 0; /* Prevents the circle from squishing */
+}
+
+.profile-circle-mini-image {
+  object-fit: cover;
 }
 
 .chat-text-meta {
@@ -636,6 +650,25 @@ hr {
   overflow: hidden;
   text-overflow: ellipsis;
   width: 100%;
+}
+
+.chat-list {
+  gap: 1cqh;
+}
+
+.user-chat-panel {
+  min-height: 42cqh;
+}
+
+.chat-panel-header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25cqh;
+}
+
+.chat-panel-header h3,
+.chat-panel-header p {
+  margin: 0;
 }
 
 .home-tile h3, 

@@ -10,11 +10,14 @@ import {
   User,
 } from 'firebase/auth';
 import {
+  addDoc,
   collection,
   doc,
   getDoc,
   getDocs,
   limit,
+  onSnapshot,
+  orderBy,
   query,
   serverTimestamp,
   setDoc,
@@ -70,6 +73,21 @@ type Dater = {
   bio: string;
   compatibility: number;
   vibe: string;
+};
+
+type ChatConversation = {
+  chatId: string;
+  matchId: string;
+  matchName: string;
+  matchPhotoUrl: string;
+  preview: string;
+  unread: boolean;
+};
+
+type ChatMessage = {
+  id: string;
+  senderId: string;
+  text: string;
 };
 
 type PlannerPrompt = {
@@ -679,6 +697,8 @@ const isOfflineFirestoreError = (value: unknown) =>
     value.message.toLowerCase().includes('offline') ||
     value.message.toLowerCase().includes('unavailable'));
 const getProfileStorageKey = (uid: string) => `gator-dater-profile:${uid}`;
+const getChatId = (leftUserId: string, rightUserId: string) =>
+  [leftUserId, rightUserId].sort().join('__');
 const plannerGreeting =
   'Hi! I can help plan Gainesville-friendly dates around your budget, vibe, and schedule. Tell me what you want, and I’ll suggest a few options.';
 const buildPlannerPrompts = (currentProfile: UserProfile | null): PlannerPrompt[] => {
@@ -733,8 +753,15 @@ export default function App() {
   const [plannerInput, setPlannerInput] = useState('');
   const [plannerLoading, setPlannerLoading] = useState(false);
   const [plannerError, setPlannerError] = useState('');
+  const [chatConversations, setChatConversations] = useState<ChatConversation[]>([]);
+  const [selectedChatId, setSelectedChatId] = useState('');
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatInput, setChatInput] = useState('');
+  const [chatLoading, setChatLoading] = useState(false);
+  const [chatError, setChatError] = useState('');
   const profilePhotoInputRef = useRef<HTMLInputElement | null>(null);
   const plannerChatRef = useRef<HTMLDivElement | null>(null);
+  const userChatRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (!auth) {
@@ -819,6 +846,111 @@ export default function App() {
 
     chatContainer.scrollTop = chatContainer.scrollHeight;
   }, [plannerMessages, plannerLoading]);
+
+  useEffect(() => {
+    const chatContainer = userChatRef.current;
+
+    if (!chatContainer) {
+      return;
+    }
+
+    chatContainer.scrollTop = chatContainer.scrollHeight;
+  }, [chatMessages, chatLoading]);
+
+  useEffect(() => {
+    if (!currentUser || !profile?.matches.length || !db) {
+      setChatConversations([]);
+      setSelectedChatId('');
+      return;
+    }
+
+    const firestore = db;
+    let cancelled = false;
+
+    const loadChatConversations = async () => {
+      const conversations = await Promise.all(
+        profile.matches.map(async (matchId) => {
+          const matchDoc = await getDoc(doc(firestore, 'users', matchId));
+
+          if (!matchDoc.exists()) {
+            return null;
+          }
+
+          const matchProfile = normalizeUserProfile(matchDoc.data() as Partial<UserProfile>, matchId);
+          const chatId = getChatId(currentUser.uid, matchId);
+          const chatDoc = await getDoc(doc(firestore, 'chats', chatId));
+          const chatData = chatDoc.exists() ? (chatDoc.data() as { lastMessage?: string }) : null;
+
+          return {
+            chatId,
+            matchId,
+            matchName: matchProfile.fullName || matchProfile.name || 'New match',
+            matchPhotoUrl: matchProfile.photoUrl || '',
+            preview: chatData?.lastMessage || `You matched with ${matchProfile.firstName || matchProfile.name || 'someone'}!`,
+            unread: false as boolean,
+          };
+        }),
+      );
+
+      if (cancelled) {
+        return;
+      }
+
+      const nextConversations = conversations.filter((conversation): conversation is ChatConversation => conversation !== null);
+      setChatConversations(nextConversations);
+      setSelectedChatId((current) =>
+        current && nextConversations.some((conversation) => conversation.chatId === current)
+          ? current
+          : nextConversations[0]?.chatId || '',
+      );
+    };
+
+    void loadChatConversations().catch(() => {
+      if (!cancelled) {
+        setChatError('Unable to load chats right now.');
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUser, profile?.matches, db]);
+
+  useEffect(() => {
+    if (!db || !selectedChatId) {
+      setChatMessages([]);
+      return;
+    }
+
+    setChatLoading(true);
+    setChatError('');
+
+    const unsubscribe = onSnapshot(
+      query(collection(db, 'chats', selectedChatId, 'messages'), orderBy('createdAt', 'asc')),
+      (snapshot) => {
+        const nextMessages = snapshot.docs.map((messageDoc) => {
+          const data = messageDoc.data() as { senderId?: string; text?: string };
+
+          return {
+            id: messageDoc.id,
+            senderId: data.senderId || '',
+            text: data.text || '',
+          };
+        });
+
+        setChatMessages(nextMessages);
+        setChatLoading(false);
+      },
+      () => {
+        setChatLoading(false);
+        setChatError('Unable to sync messages right now.');
+      },
+    );
+
+    return () => {
+      unsubscribe();
+    };
+  }, [db, selectedChatId]);
 
   const resetMessages = () => {
     setError('');
@@ -1721,6 +1853,51 @@ export default function App() {
     await sendPlannerMessage(prompt);
   };
 
+  const handleSendChatMessage = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    if (!db || !currentUser || !selectedChatId || !chatInput.trim()) {
+      return;
+    }
+
+    const text = chatInput.trim();
+    const selectedConversation = chatConversations.find(
+      (conversation) => conversation.chatId === selectedChatId,
+    );
+
+    setChatInput('');
+    setChatError('');
+
+    try {
+      await addDoc(collection(db, 'chats', selectedChatId, 'messages'), {
+        senderId: currentUser.uid,
+        text,
+        createdAt: serverTimestamp(),
+      });
+
+      await setDoc(
+        doc(db, 'chats', selectedChatId),
+        {
+          participants: [currentUser.uid, selectedConversation?.matchId].filter(Boolean),
+          lastMessage: text,
+          lastMessageAt: serverTimestamp(),
+        },
+        { merge: true },
+      );
+
+      setChatConversations((current) =>
+        current.map((conversation) =>
+          conversation.chatId === selectedChatId
+            ? { ...conversation, preview: text }
+            : conversation,
+        ),
+      );
+    } catch {
+      setChatInput(text);
+      setChatError('Unable to send your message right now.');
+    }
+  };
+
   const renderFrame = (content: ReactNode) => (
     <main className="app-shell">
       <section className="phone-shell">
@@ -1852,26 +2029,97 @@ export default function App() {
     }
 
     if (activeTab === 'chats') {
-      return (
-        <section className="home-grid">
-          {/* Example 1: Ava */}
-          <article className="chat-match-row unread">
-            <div className="profile-circle-mini" />
-            <div className="chat-text-meta">
-              <h3 className="chat-name">Ava</h3>
-              <p className="chat-preview">That coffee place looks cute. Want to go Thursday?</p>
-            </div>
-          </article>
+      const selectedConversation = chatConversations.find(
+        (conversation) => conversation.chatId === selectedChatId,
+      );
 
-          {/* Example 2: Jordan */}
-          <article className="chat-match-row">
-            <div className="profile-circle-mini" />
-            <div className="chat-text-meta">
-              <h3 className="chat-name">Jordan</h3>
-              <p className="chat-preview">What kind of food do you usually like for first dates?</p>
-            </div>
-          </article>
-        </section>
+      return (
+        <>
+          <p className="account-detail">Chat with your mutual matches here.</p>
+          {chatError ? <p className="planner-error-text">{chatError}</p> : null}
+          {!profile?.matches.length ? (
+            <section className="home-grid">
+              <article className="home-tile">
+                <h3>No chats yet</h3>
+                <p>When two users like each other, their conversation will appear here.</p>
+              </article>
+            </section>
+          ) : (
+            <>
+              <section className="home-grid chat-list">
+                {chatConversations.map((conversation) => (
+                  <button
+                    key={conversation.chatId}
+                    className={
+                      selectedChatId === conversation.chatId
+                        ? 'chat-match-row unread chat-match-button selected-chat'
+                        : conversation.unread
+                          ? 'chat-match-row unread chat-match-button'
+                          : 'chat-match-row chat-match-button'
+                    }
+                    type="button"
+                    onClick={() => setSelectedChatId(conversation.chatId)}
+                  >
+                    {conversation.matchPhotoUrl ? (
+                      <img
+                        src={conversation.matchPhotoUrl}
+                        alt={conversation.matchName}
+                        className="profile-circle-mini profile-circle-mini-image"
+                      />
+                    ) : (
+                      <div className="profile-circle-mini" />
+                    )}
+                    <div className="chat-text-meta">
+                      <h3 className="chat-name">{conversation.matchName}</h3>
+                      <p className="chat-preview">{conversation.preview}</p>
+                    </div>
+                  </button>
+                ))}
+              </section>
+
+              <section className="chat user-chat-panel">
+                <div className="chat-panel-header">
+                  <h3>{selectedConversation?.matchName || 'Select a match'}</h3>
+                  <p>{selectedConversation ? 'Start the conversation.' : 'Choose a match above.'}</p>
+                </div>
+                <div className="chat-section planner-chat-section" ref={userChatRef}>
+                  {chatMessages.length ? (
+                    chatMessages.map((message) => (
+                      <div
+                        key={message.id}
+                        className={
+                          message.senderId === currentUser?.uid ? 'message-from-user' : 'message-from-other'
+                        }
+                      >
+                        <p>{message.text}</p>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="message-from-other">
+                      <p>Say hi and start planning something fun together.</p>
+                    </div>
+                  )}
+                </div>
+                <form className="chat-input" onSubmit={handleSendChatMessage}>
+                  <input
+                    type="text"
+                    placeholder={selectedConversation ? `Message ${selectedConversation.matchName}...` : 'Select a chat first'}
+                    value={chatInput}
+                    onChange={(event) => setChatInput(event.target.value)}
+                    disabled={!selectedConversation || chatLoading}
+                  />
+                  <button
+                    className="submit-button"
+                    type="submit"
+                    disabled={!selectedConversation || chatLoading || !chatInput.trim()}
+                  >
+                    <img src={submitImg} alt="Send" className="send-icon" />
+                  </button>
+                </form>
+              </section>
+            </>
+          )}
+        </>
       );
     }
 
