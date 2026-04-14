@@ -86,6 +86,7 @@ type Dater = {
   dateBudget: string;
   dateVibe: string[];
   availability: string[];
+  photoUrl: string;
 };
 
 type ChatConversation = {
@@ -597,6 +598,7 @@ const profileToDater = (profileEntry: UserProfile): Dater => {
     dateBudget: profileEntry.dateBudget,
     dateVibe: profileEntry.dateVibe,
     availability: profileEntry.availability,
+    photoUrl: profileEntry.photoUrl || '',
   };
 };
 const normalizePreferences = (preferences: Partial<Preferences> | undefined): Preferences => ({
@@ -1025,6 +1027,28 @@ export default function App() {
         }
 
         setProfile(nextProfile);
+        setProfileForm((current) => ({
+          ...current,
+          firstName: nextProfile.firstName || current.firstName,
+          lastName: nextProfile.lastName || current.lastName,
+          age: String(nextProfile.age || current.age),
+          yearAtUf: nextProfile.yearAtUf || current.yearAtUf,
+          bio: nextProfile.bio || current.bio,
+          photoUrl: nextProfile.photoUrl || user.photoURL || current.photoUrl,
+          intention: nextProfile.preferences.intention || current.intention,
+          genderIdentity: nextProfile.preferences.genderIdentity || current.genderIdentity,
+          genderPreference: nextProfile.preferences.genderPreference || current.genderPreference,
+          intentionOpenTo: nextProfile.preferences.intentionOpenTo || current.intentionOpenTo,
+          ageRangeMin: String(nextProfile.preferences.ageRange.min || current.ageRangeMin),
+          ageRangeMax: String(nextProfile.preferences.ageRange.max || current.ageRangeMax),
+          vibeWords: nextProfile.preferences.vibeWords || current.vibeWords,
+          socialEnergy: nextProfile.preferences.socialEnergy ?? current.socialEnergy,
+          dateBudget: nextProfile.preferences.dateBudget || current.dateBudget,
+          dateVibe: nextProfile.preferences.dateVibe || current.dateVibe,
+          distance: nextProfile.preferences.distance || current.distance,
+          availability: nextProfile.preferences.availability || current.availability,
+          interests: nextProfile.preferences.interests || current.interests,
+        }));
         setScreen(nextProfile.onboardingCompleted ? 'home' : 'profile');
       } catch (loadError) {
         setProfile(null);
@@ -1355,6 +1379,49 @@ export default function App() {
     );
   };
 
+  const readPhotoFile = (file: File) =>
+    new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+
+      reader.onload = () => {
+        const result = reader.result;
+
+        if (typeof result !== 'string') {
+          reject(new Error('Unable to read the selected photo.'));
+          return;
+        }
+
+        const image = new Image();
+
+        image.onload = () => {
+          const maxDimension = 512;
+          const scale = Math.min(1, maxDimension / Math.max(image.width, image.height));
+          const width = Math.max(1, Math.round(image.width * scale));
+          const height = Math.max(1, Math.round(image.height * scale));
+          const canvas = document.createElement('canvas');
+          const context = canvas.getContext('2d');
+
+          if (!context) {
+            resolve(result);
+            return;
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          context.drawImage(image, 0, 0, width, height);
+
+          const compressedResult = canvas.toDataURL('image/jpeg', 0.82);
+          resolve(compressedResult.length < result.length ? compressedResult : result);
+        };
+
+        image.onerror = () => resolve(result);
+        image.src = result;
+      };
+
+      reader.onerror = () => reject(new Error('Unable to read the selected photo.'));
+      reader.readAsDataURL(file);
+    });
+
   const saveProfilePhoto = async (photoUrl: string) => {
     if (!currentUser || !currentUser.email) {
       return;
@@ -1432,7 +1499,11 @@ export default function App() {
 
       await updateProfile(currentUser, {
         displayName: updatedProfile.fullName,
+        photoURL: photoUrl,
       });
+
+      await reload(currentUser);
+      setCurrentUser(auth?.currentUser || currentUser);
 
       setStatus('Profile photo updated.');
     } catch (photoError) {
@@ -1450,31 +1521,29 @@ export default function App() {
     }
   };
 
-  const handlePhotoChange = (event: ChangeEvent<HTMLInputElement>) => {
+  const handlePhotoChange = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
 
     if (!file) {
       return;
     }
+    event.target.value = '';
 
-    const reader = new FileReader();
-
-    reader.onload = () => {
-      const result = reader.result;
-
-      if (typeof result !== 'string') {
-        return;
-      }
+    try {
+      const result = await readPhotoFile(file);
 
       setProfileForm((current) => ({
         ...current,
         photoUrl: result,
       }));
       setStatus('Photo selected.');
-    };
-
-    reader.readAsDataURL(file);
-    event.target.value = '';
+    } catch (photoError) {
+      setError(
+        photoError instanceof Error
+          ? photoError.message
+          : 'Unable to process the selected photo.',
+      );
+    }
   };
 
   const handleProfilePhotoUpdate = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -1483,20 +1552,18 @@ export default function App() {
     if (!file || !currentUser || !currentUser.email) {
       return;
     }
-    const reader = new FileReader();
-
-    reader.onload = async () => {
-      const result = reader.result;
-
-      if (typeof result !== 'string') {
-        return;
-      }
-
-      await saveProfilePhoto(result);
-    };
-
-    reader.readAsDataURL(file);
     event.target.value = '';
+
+    try {
+      const result = await readPhotoFile(file);
+      await saveProfilePhoto(result);
+    } catch (photoError) {
+      setError(
+        photoError instanceof Error
+          ? photoError.message
+          : 'Unable to process the selected photo.',
+      );
+    }
   };
 
   const loadUserProfile = async (user: User) => {
@@ -1535,6 +1602,9 @@ export default function App() {
       throw loadError;
     }
   };
+
+  const activeProfilePhoto =
+    profileForm.photoUrl || profile?.photoUrl || currentUser?.photoURL || '';
 
   const handleBack = () => {
     resetMessages();
@@ -1968,7 +2038,7 @@ export default function App() {
       distance: nextPreferences.distance,
       availability: nextPreferences.availability,
       email: currentUser.email,
-      photoUrl: profile?.photoUrl || profileForm.photoUrl || '',
+      photoUrl: profileForm.photoUrl || profile?.photoUrl || '',
       preferences: nextPreferences,
       likedUsers: profile?.likedUsers || [],
       passedUsers: profile?.passedUsers || [],
@@ -2734,7 +2804,15 @@ export default function App() {
                   role="button"
                   tabIndex={0}
                 >
-                  <div className="profile-circle-mini" />
+                  {dater.photoUrl ? (
+                    <img
+                      src={dater.photoUrl}
+                      alt={`${dater.name} profile`}
+                      className="profile-circle-mini profile-circle-mini-image"
+                    />
+                  ) : (
+                    <div className="profile-circle-mini" />
+                  )}
                   <div className="chat-text-meta">
                     <h3 className="chat-name">{dater.name}</h3>
                     <p className="chat-preview">Open conversation</p>
@@ -2821,13 +2899,21 @@ export default function App() {
       return (
         <>
           <section className="intro-profile-panel">
-            {profile?.photoUrl || currentUser?.photoURL ? (
+            {activeProfilePhoto ? (
               <div className="profile-photo-wrap">
                 <img
-                  src={profile?.photoUrl || currentUser?.photoURL || ''}
+                  src={activeProfilePhoto}
                   alt={`${profile?.fullName || currentUser?.displayName || 'User'} profile`}
                   className="profile-photo"
                 />
+                <button
+                  className="profile-photo-edit-button"
+                  type="button"
+                  onClick={() => profilePhotoInputRef.current?.click()}
+                  aria-label="Edit profile photo"
+                >
+                  <img src={writeImg} alt="" className="profile-photo-edit-icon" />
+                </button>
               </div>
             ) : null}
             <h1>{profile?.fullName || currentUser?.displayName || currentUser?.email}</h1>
@@ -2839,13 +2925,6 @@ export default function App() {
               className="hidden-input"
               onChange={handleProfilePhotoUpdate}
             />
-            <button
-              className="secondary-button tile-button"
-              type="button"
-              onClick={() => profilePhotoInputRef.current?.click()}
-            >
-              Edit Profile Photo
-            </button>
           </section>
           <section className="home-grid">
             <article className="profile-tile">
@@ -2903,6 +2982,15 @@ export default function App() {
         <section className="swipe-stack">
           {currentDater ? (
             <article className="swipe-card" /*style={{ backgroundImage: `url(${currentDater.image})` }} */>
+              {currentDater.photoUrl ? (
+                <div className="swipe-photo-wrap">
+                  <img
+                    src={currentDater.photoUrl}
+                    alt={`${currentDater.name} profile`}
+                    className="swipe-photo"
+                  />
+                </div>
+              ) : null}
               <p>{currentDater.compatibility}% match</p>
               <h2>
                 {currentDater.name}, {currentDater.age}
@@ -3672,6 +3760,15 @@ export default function App() {
               <div className="likes-list">
                 {likedDaters.map((dater) => (
                   <article key={dater.id} className="liked-card">
+                    {dater.photoUrl ? (
+                      <div className="profile-photo-wrap">
+                        <img
+                          src={dater.photoUrl}
+                          alt={`${dater.name} profile`}
+                          className="profile-photo liked-profile-photo"
+                        />
+                      </div>
+                    ) : null}
                     <p className="account-label">{dater.compatibility}% match</p>
                     <h3>
                       {dater.name}, {dater.age}
@@ -3703,6 +3800,15 @@ export default function App() {
               <div className="likes-list">
                 {matchedDaters.map((dater) => (
                   <article key={dater.id} className="liked-card">
+                    {dater.photoUrl ? (
+                      <div className="profile-photo-wrap">
+                        <img
+                          src={dater.photoUrl}
+                          alt={`${dater.name} profile`}
+                          className="profile-photo liked-profile-photo"
+                        />
+                      </div>
+                    ) : null}
                     <p className="account-label">{dater.compatibility}% match</p>
                     <h3>
                       {dater.name}, {dater.age}
@@ -3728,24 +3834,22 @@ export default function App() {
         <div className={`active-indicator pos-${activeTab}`} />
 
         <div className="icons-wrapper">
-          <div className="icons-wrapper-extra">
-            <button
-              className={activeTab === 'calendar' ? 'tab-button active' : 'tab-button'}
-              onClick={() => setActiveTab('calendar')}
-            >
-              <span className="tab-icon">
-                <img src={calenderImg} alt="Calendar" />
-              </span>
-            </button>
-            <button
-              className={activeTab === 'planner' ? 'tab-button active' : 'tab-button'}
-              onClick={() => setActiveTab('planner')}
-            >
-              <span className="tab-icon">
-                <img src={writeImg} alt="Write" />
-              </span>
-            </button>
-          </div>
+          <button
+            className={activeTab === 'calendar' ? 'tab-button active' : 'tab-button'}
+            onClick={() => setActiveTab('calendar')}
+          >
+            <span className="tab-icon">
+              <img src={calenderImg} alt="Calendar" />
+            </span>
+          </button>
+          <button
+            className={activeTab === 'planner' ? 'tab-button active' : 'tab-button'}
+            onClick={() => setActiveTab('planner')}
+          >
+            <span className="tab-icon">
+              <img src={writeImg} alt="Write" />
+            </span>
+          </button>
           <button
             className={activeTab === 'swipe' ? 'tab-button active' : 'tab-button'}
             onClick={() => setActiveTab('swipe')}
@@ -3754,24 +3858,22 @@ export default function App() {
               <img src={heartNavImg} alt="Like" />
             </span>
           </button>
-          <div className="icons-wrapper-extra">
-            <button
-              className={activeTab === 'chats' ? 'tab-button active' : 'tab-button'}
-              onClick={() => setActiveTab('chats')}
-            >
-              <span className="tab-icon">
-                <img src={chatImg} alt="Chats" />
-              </span>
-            </button>
-            <button
-              className={activeTab === 'profile-tab' ? 'tab-button active' : 'tab-button'}
-              onClick={() => setActiveTab('profile-tab')}
-            >
-              <span className="tab-icon">
-                <img src={userImg} alt="Profile" />
-              </span>
-            </button>
-          </div>
+          <button
+            className={activeTab === 'chats' ? 'tab-button active' : 'tab-button'}
+            onClick={() => setActiveTab('chats')}
+          >
+            <span className="tab-icon">
+              <img src={chatImg} alt="Chats" />
+            </span>
+          </button>
+          <button
+            className={activeTab === 'profile-tab' ? 'tab-button active' : 'tab-button'}
+            onClick={() => setActiveTab('profile-tab')}
+          >
+            <span className="tab-icon">
+              <img src={userImg} alt="Profile" />
+            </span>
+          </button>
         </div>
       </nav>
 

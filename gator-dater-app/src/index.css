@@ -656,7 +656,10 @@ hr {
 }
 
 .profile-circle-mini-image {
+  width: 12.7cqw;
+  height: 12.7cqw;
   object-fit: cover;
+  border-radius: 9999px;
 }
 
 .chat-text-meta {
@@ -940,7 +943,7 @@ input:focus {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 1.5cqh;
+  gap: 0.8cqh;
 }
 
 .intro-profile-panel h1 {
@@ -963,15 +966,41 @@ input:focus {
 .profile-photo-wrap {
   display: flex;
   justify-content: center;
+  position: relative;
+  width: fit-content;
+  margin: 0 auto;
 }
 
 .profile-photo {
-  width: 26.46cqw;
-  height: 26.46cqw;
+  width: 29cqw;
+  height: 29cqw;
   object-fit: cover;
   border-radius: 50%;
   border: 3px solid var(--color-whitePink);
   box-shadow: 0 0px 15px var(--color-lightPink);
+}
+
+.profile-photo-edit-button {
+  position: absolute;
+  right: 0.4cqw;
+  bottom: 0.4cqw;
+  width: 8.5cqw;
+  height: 8.5cqw;
+  border: none;
+  border-radius: 9999px;
+  background: var(--color-pink);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  cursor: pointer;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.14);
+}
+
+.profile-photo-edit-icon {
+  width: 4cqw;
+  height: 4cqw;
+  object-fit: contain;
 }
 
 .hidden-file-input {
@@ -1063,6 +1092,11 @@ input:focus {
   line-height: 1.2;
 }
 
+.liked-profile-photo {
+  width: 20cqw;
+  height: 20cqw;
+}
+
 .status-text,
 .error-text {
   margin: 0.85cqw 0 0;
@@ -1109,6 +1143,20 @@ input:focus {
   flex-direction: column;
   justify-content: flex-end;
   box-shadow: 0 14px 32px rgba(0, 0, 0, 0.08);
+}
+
+.swipe-photo-wrap {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 1rem;
+}
+
+.swipe-photo {
+  width: 100%;
+  max-height: 34cqh;
+  object-fit: cover;
+  border-radius: 20px;
+  border: 2px solid var(--color-whitePink);
 }
 
 .swipe-vibe {
@@ -1168,6 +1216,8 @@ button.Ellipse2 {
   align-items: center;
   justify-content: center;
   background: white;
+  --nav-width: 97cqw;
+  --tab-step: calc(var(--nav-width) / 5);
 }
 
 .nav-bg {
@@ -1183,43 +1233,51 @@ button.Ellipse2 {
 
 .active-indicator {
   position: absolute;
-  width: 15cqw;
-  height: 15cqw;
+  top: 50%;
+  left: 50%;
+  width: 13.2cqw;
+  height: 13.2cqw;
   background: var(--color-whitePink);
   border-radius: 9999px;
   z-index: 2;
-  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transform: translate(-50%, -50%);
+  transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.pos-calendar    { transform: translateX(-261%); }
-.pos-planner     { transform: translateX(-147%); }
-.pos-swipe       { transform: translateX(0%);    }
-.pos-chats       { transform: translateX(147%);  }
-.pos-profile-tab { transform: translateX(261%);  }
+.pos-calendar    { left: calc(50% - (2 * var(--tab-step))); }
+.pos-planner     { left: calc(50% - var(--tab-step) - 0.8cqw); }
+.pos-swipe       { left: 50%; }
+.pos-chats       { left: calc(50% + var(--tab-step) + 0.8cqw); }
+.pos-profile-tab { left: calc(50% + (2 * var(--tab-step))); }
 
 .icons-wrapper {
   position: relative;
   z-index: 3;
-  width: 100%;
-  display: flex;
-  justify-content: space-between;
-  padding: 0 6cqw;
-}
-
-.icons-wrapper-extra {
-  display: flex;
-  gap: 8.5cqw;
+  width: var(--nav-width);
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  align-items: center;
+  justify-items: center;
 }
 
 .tab-button {
   background: transparent !important;
   border: none;
-  width: auto;
-  height: auto;
+  width: 100%;
+  height: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
+  padding: 0;
+}
+
+.icons-wrapper .tab-button:nth-child(2) .tab-icon {
+  transform: translateX(-0.8cqw);
+}
+
+.icons-wrapper .tab-button:nth-child(4) .tab-icon {
+  transform: translateX(0.8cqw);
 }
 
 .tab-icon {
