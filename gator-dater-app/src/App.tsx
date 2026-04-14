@@ -11,6 +11,7 @@ import {
 } from 'firebase/auth';
 import {
   collection,
+  deleteField,
   doc,
   getDoc,
   getDocs,
@@ -277,12 +278,13 @@ const interestOptions = [
   'Travel',
   'Volunteering',
 ];
+
 const sampleDiscoveryProfiles: Array<Partial<UserProfile> & { uid: string }> = [
   {
     uid: 'sample-leah',
     firstName: 'Leah',
-    lastName: 'R',
-    fullName: 'Leah R',
+    lastName: 'Sample',
+    fullName: 'Leah Sample',
     age: 21,
     yearAtUf: 'Junior',
     bio: 'Quiet reader who loves coffee shop hangs and movie nights.',
@@ -307,10 +309,10 @@ const sampleDiscoveryProfiles: Array<Partial<UserProfile> & { uid: string }> = [
     },
   },
   {
-    uid: 'sample-ava',
+    uid: 'sample-ethan',
     firstName: 'Ethan',
-    lastName: 'M',
-    fullName: 'Ethan M',
+    lastName: 'Sample',
+    fullName: 'Ethan Sample',
     age: 20,
     yearAtUf: 'Sophomore',
     bio: 'Outgoing and social, always down to try a new spot in town.',
@@ -337,8 +339,8 @@ const sampleDiscoveryProfiles: Array<Partial<UserProfile> & { uid: string }> = [
   {
     uid: 'sample-jordan',
     firstName: 'Jordan',
-    lastName: 'T',
-    fullName: 'Jordan T',
+    lastName: 'Sample',
+    fullName: 'Jordan Sample',
     age: 22,
     yearAtUf: 'Senior',
     bio: 'Gym regular who likes active first dates and football weekends.',
@@ -365,8 +367,8 @@ const sampleDiscoveryProfiles: Array<Partial<UserProfile> & { uid: string }> = [
   {
     uid: 'sample-dylan',
     firstName: 'Dylan',
-    lastName: 'Cruz',
-    fullName: 'Dylan Cruz',
+    lastName: 'Sample',
+    fullName: 'Dylan Sample',
     age: 21,
     yearAtUf: 'Junior',
     bio: 'Low-key gamer and foodie who likes good playlists and better conversation.',
@@ -391,10 +393,10 @@ const sampleDiscoveryProfiles: Array<Partial<UserProfile> & { uid: string }> = [
     },
   },
   {
-    uid: 'sample-maya',
+    uid: 'sample-noah',
     firstName: 'Noah',
-    lastName: 'S',
-    fullName: 'Noah S',
+    lastName: 'Sample',
+    fullName: 'Noah Sample',
     age: 21,
     yearAtUf: 'Junior',
     bio: 'Creative and thoughtful, happiest with art, film, and chill weekends.',
@@ -421,8 +423,8 @@ const sampleDiscoveryProfiles: Array<Partial<UserProfile> & { uid: string }> = [
   {
     uid: 'sample-nina',
     firstName: 'Nina',
-    lastName: 'K',
-    fullName: 'Nina K',
+    lastName: 'Sample',
+    fullName: 'Nina Sample',
     age: 19,
     yearAtUf: 'Freshman',
     bio: 'Friendly and easygoing, into coffee runs, trivia nights, and games.',
@@ -447,10 +449,10 @@ const sampleDiscoveryProfiles: Array<Partial<UserProfile> & { uid: string }> = [
     },
   },
   {
-    uid: 'sample-sophia',
+    uid: 'sample-liam',
     firstName: 'Liam',
-    lastName: 'L',
-    fullName: 'Liam L',
+    lastName: 'Sample',
+    fullName: 'Liam Sample',
     age: 23,
     yearAtUf: 'Graduate',
     bio: 'Planner with foodie energy who enjoys weekend adventures and live music.',
@@ -672,6 +674,36 @@ const isOfflineFirestoreError = (value: unknown) =>
     value.message.toLowerCase().includes('offline') ||
     value.message.toLowerCase().includes('unavailable'));
 const getProfileStorageKey = (uid: string) => `gator-dater-profile:${uid}`;
+const buildFirestoreUserProfile = (nextProfile: UserProfile) => ({
+  uid: nextProfile.uid,
+  firstName: nextProfile.firstName,
+  lastName: nextProfile.lastName,
+  fullName: nextProfile.fullName,
+  name: nextProfile.name,
+  age: nextProfile.age,
+  yearAtUf: nextProfile.yearAtUf,
+  bio: nextProfile.bio,
+  email: nextProfile.email,
+  photoUrl: nextProfile.photoUrl,
+  preferences: nextProfile.preferences,
+  likedUsers: nextProfile.likedUsers,
+  passedUsers: nextProfile.passedUsers,
+  matches: nextProfile.matches,
+  blockedUsers: nextProfile.blockedUsers,
+  conversations: nextProfile.conversations || {},
+  onboardingCompleted: nextProfile.onboardingCompleted,
+  createdAt: nextProfile.createdAt || serverTimestamp(),
+  gender: deleteField(),
+  genderPreference: deleteField(),
+  intentionOpenTo: deleteField(),
+  ageRange: deleteField(),
+  intention: deleteField(),
+  interests: deleteField(),
+  dateBudget: deleteField(),
+  dateVibe: deleteField(),
+  distance: deleteField(),
+  availability: deleteField(),
+});
 const getChatStorageKey = (leftUserId: string, rightUserId: string) =>
   `gator-dater-chat:${[leftUserId, rightUserId].sort().join('__')}`;
 const getConversationId = (leftUserId: string, rightUserId: string) => {
@@ -1090,7 +1122,7 @@ export default function App() {
 
     try {
       if (db) {
-        await setDoc(doc(db, 'users', currentUser.uid), updatedProfile, { merge: true });
+        await setDoc(doc(db, 'users', currentUser.uid), buildFirestoreUserProfile(updatedProfile), { merge: true });
         setFirestoreHealth('connected');
       }
 
@@ -1442,7 +1474,7 @@ export default function App() {
 
       saveLocalProfile(currentUser.uid, nextProfile);
 
-      await setDoc(doc(db, 'users', currentUser.uid), nextProfile, { merge: true });
+      await setDoc(doc(db, 'users', currentUser.uid), buildFirestoreUserProfile(nextProfile), { merge: true });
       setFirestoreHealth('connected');
       await updateProfile(currentUser, {
         displayName: nextProfile.fullName,
@@ -1647,24 +1679,7 @@ export default function App() {
 
     try {
       if (db) {
-        await setDoc(
-          doc(db, 'users', currentUser.uid),
-          {
-            preferences: nextPreferences,
-            gender: updatedProfile.gender,
-            genderPreference: updatedProfile.genderPreference,
-            intentionOpenTo: updatedProfile.intentionOpenTo,
-            ageRange: updatedProfile.ageRange,
-            intention: updatedProfile.intention,
-            bio: updatedProfile.bio,
-            interests: updatedProfile.interests,
-            dateBudget: updatedProfile.dateBudget,
-            dateVibe: updatedProfile.dateVibe,
-            distance: updatedProfile.distance,
-            availability: updatedProfile.availability,
-          },
-          { merge: true },
-        );
+        await setDoc(doc(db, 'users', currentUser.uid), buildFirestoreUserProfile(updatedProfile), { merge: true });
         setFirestoreHealth('connected');
       }
 
