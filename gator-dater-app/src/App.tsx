@@ -11,14 +11,17 @@ import {
 } from 'firebase/auth';
 import {
   collection,
+  deleteField,
   doc,
   getDoc,
   getDocs,
   limit,
+  onSnapshot,
+  orderBy,
   query,
   serverTimestamp,
   setDoc,
-  where,
+  writeBatch,
 } from 'firebase/firestore';
 import { auth, db, isFirebaseConfigured } from './firebase';
 import gatorImage from '../assets/PLEASE REPLACE.png';
@@ -72,6 +75,7 @@ type Dater = {
   bio: string;
   compatibility: number;
   vibe: string;
+  image: string;
 };
 
 type SignUpState = {
@@ -153,8 +157,18 @@ type UserProfile = {
   passedUsers: string[];
   matches: string[];
   blockedUsers: string[];
+  conversations?: Record<string, string>;
   onboardingCompleted: boolean;
   createdAt?: unknown;
+};
+
+type ChatMessage = {
+  id: string;
+  senderId: string;
+  senderName: string;
+  text: string;
+  sentAt: number;
+  status?: 'pending' | 'sent' | 'failed';
 };
 
 const initialSignUp: SignUpState = {
@@ -268,204 +282,205 @@ const interestOptions = [
   'Travel',
   'Volunteering',
 ];
-const sampleDiscoveryProfiles: Array<Partial<UserProfile> & { uid: string }> = [
-  {
-    uid: 'sample-leah',
-    firstName: 'Leah',
-    lastName: 'R',
-    fullName: 'Leah R',
-    age: 21,
-    yearAtUf: 'Junior',
-    bio: 'Quiet reader who loves coffee shop hangs and movie nights.',
-    gender: 'woman',
-    intention: 'dating',
-    interests: ['Reading', 'Coffee shops', 'Photography', 'Film'],
-    dateVibe: ['Artsy', 'Chill'],
-    dateBudget: 'low',
-    preferences: {
-      intention: 'dating',
-      genderIdentity: 'woman',
-      genderPreference: 'men',
-      intentionOpenTo: 'dating',
-      ageRange: { min: 20, max: 25 },
-      vibeWords: ['Artsy', 'Planner', 'Curious'],
-      socialEnergy: 45,
-      dateBudget: 'low',
-      dateVibe: ['Artsy', 'Chill'],
-      distance: 'near',
-      availability: ['weekends'],
-      interests: ['Reading', 'Coffee shops', 'Photography', 'Film'],
-    },
-  },
-  {
-    uid: 'sample-ava',
-    firstName: 'Ethan',
-    lastName: 'M',
-    fullName: 'Ethan M',
-    age: 20,
-    yearAtUf: 'Sophomore',
-    bio: 'Outgoing and social, always down to try a new spot in town.',
-    gender: 'man',
-    intention: 'dating',
-    interests: ['Concerts', 'Thrifting', 'Coffee shops', 'Travel'],
-    dateVibe: ['Foodie', 'Surprise me'],
-    dateBudget: 'mid',
-    preferences: {
-      intention: 'dating',
-      genderIdentity: 'man',
-      genderPreference: 'women',
-      intentionOpenTo: 'either',
-      ageRange: { min: 18, max: 24 },
-      vibeWords: ['Spontaneous', 'Social', 'Foodie'],
-      socialEnergy: 80,
-      dateBudget: 'mid',
-      dateVibe: ['Foodie', 'Surprise me'],
-      distance: 'anywhere',
-      availability: ['either'],
-      interests: ['Concerts', 'Thrifting', 'Coffee shops', 'Travel'],
-    },
-  },
-  {
-    uid: 'sample-jordan',
-    firstName: 'Jordan',
-    lastName: 'T',
-    fullName: 'Jordan T',
-    age: 22,
-    yearAtUf: 'Senior',
-    bio: 'Gym regular who likes active first dates and football weekends.',
-    gender: 'man',
-    intention: 'either',
-    interests: ['Gym', 'Football games', 'Pickleball', 'Hiking'],
-    dateVibe: ['Active'],
-    dateBudget: 'free',
-    preferences: {
-      intention: 'either',
-      genderIdentity: 'man',
-      genderPreference: 'women',
-      intentionOpenTo: 'either',
-      ageRange: { min: 19, max: 25 },
-      vibeWords: ['Athletic', 'Spontaneous', 'Adventurous'],
-      socialEnergy: 72,
-      dateBudget: 'free',
-      dateVibe: ['Active'],
-      distance: 'near',
-      availability: ['weekdays'],
-      interests: ['Gym', 'Football games', 'Pickleball', 'Hiking'],
-    },
-  },
-  {
-    uid: 'sample-dylan',
-    firstName: 'Dylan',
-    lastName: 'Cruz',
-    fullName: 'Dylan Cruz',
-    age: 21,
-    yearAtUf: 'Junior',
-    bio: 'Low-key gamer and foodie who likes good playlists and better conversation.',
-    gender: 'man',
-    intention: 'dating',
-    interests: ['Board games', 'Coffee shops', 'Trying new restaurants', 'Music', 'Gaming', 'Travel'],
-    dateVibe: ['Foodie', 'Surprise me', 'Chill'],
-    dateBudget: 'low',
-    preferences: {
-      intention: 'dating',
-      genderIdentity: 'man',
-      genderPreference: 'women',
-      intentionOpenTo: 'either',
-      ageRange: { min: 18, max: 25 },
-      vibeWords: ['Foodie', 'Night owl', 'Curious'],
-      socialEnergy: 30,
-      dateBudget: 'low',
-      dateVibe: ['Foodie', 'Surprise me', 'Chill'],
-      distance: 'anywhere',
-      availability: ['either'],
-      interests: ['Board games', 'Coffee shops', 'Trying new restaurants', 'Music', 'Gaming', 'Travel'],
-    },
-  },
-  {
-    uid: 'sample-maya',
-    firstName: 'Noah',
-    lastName: 'S',
-    fullName: 'Noah S',
-    age: 21,
-    yearAtUf: 'Junior',
-    bio: 'Creative and thoughtful, happiest with art, film, and chill weekends.',
-    gender: 'man',
-    intention: 'friendship',
-    interests: ['Painting', 'Film', 'Photography', 'Board games'],
-    dateVibe: ['Artsy'],
-    dateBudget: 'low',
-    preferences: {
-      intention: 'friendship',
-      genderIdentity: 'man',
-      genderPreference: 'everyone',
-      intentionOpenTo: 'friendship',
-      ageRange: { min: 20, max: 24 },
-      vibeWords: ['Artsy', 'Homebody', 'Planner'],
-      socialEnergy: 38,
-      dateBudget: 'low',
-      dateVibe: ['Artsy'],
-      distance: 'campus',
-      availability: ['weekends'],
-      interests: ['Painting', 'Film', 'Photography', 'Board games'],
-    },
-  },
-  {
-    uid: 'sample-nina',
-    firstName: 'Nina',
-    lastName: 'K',
-    fullName: 'Nina K',
-    age: 19,
-    yearAtUf: 'Freshman',
-    bio: 'Friendly and easygoing, into coffee runs, trivia nights, and games.',
-    gender: 'woman',
-    intention: 'either',
-    interests: ['Coffee shops', 'Reading', 'Gaming', 'Trivia nights'],
-    dateVibe: ['Chill', 'Foodie'],
-    dateBudget: 'low',
-    preferences: {
-      intention: 'either',
-      genderIdentity: 'woman',
-      genderPreference: 'everyone',
-      intentionOpenTo: 'either',
-      ageRange: { min: 18, max: 22 },
-      vibeWords: ['Curious', 'Early bird', 'Chill'],
-      socialEnergy: 55,
-      dateBudget: 'low',
-      dateVibe: ['Chill', 'Foodie'],
-      distance: 'campus',
-      availability: ['either'],
-      interests: ['Coffee shops', 'Reading', 'Gaming', 'Trivia nights'],
-    },
-  },
-  {
-    uid: 'sample-sophia',
-    firstName: 'Liam',
-    lastName: 'L',
-    fullName: 'Liam L',
-    age: 23,
-    yearAtUf: 'Graduate',
-    bio: 'Planner with foodie energy who enjoys weekend adventures and live music.',
-    gender: 'man',
-    intention: 'dating',
-    interests: ['Trying new restaurants', 'Travel', 'Music', 'Cooking'],
-    dateVibe: ['Foodie', 'Surprise me'],
-    dateBudget: 'mid',
-    preferences: {
-      intention: 'dating',
-      genderIdentity: 'man',
-      genderPreference: 'women',
-      intentionOpenTo: 'dating',
-      ageRange: { min: 22, max: 28 },
-      vibeWords: ['Foodie', 'Planner', 'Night owl'],
-      socialEnergy: 67,
-      dateBudget: 'mid',
-      dateVibe: ['Foodie', 'Surprise me'],
-      distance: 'anywhere',
-      availability: ['weekends'],
-      interests: ['Trying new restaurants', 'Travel', 'Music', 'Cooking'],
-    },
-  },
-];
+
+// const sampleDiscoveryProfiles: Array<Partial<UserProfile> & { uid: string }> = [
+//   {
+//     uid: 'sample-leah',
+//     firstName: 'Leah',
+//     lastName: 'Sample',
+//     fullName: 'Leah Sample',
+//     age: 21,
+//     yearAtUf: 'Junior',
+//     bio: 'Quiet reader who loves coffee shop hangs and movie nights.',
+//     gender: 'woman',
+//     intention: 'dating',
+//     interests: ['Reading', 'Coffee shops', 'Photography', 'Film'],
+//     dateVibe: ['Artsy', 'Chill'],
+//     dateBudget: 'low',
+//     preferences: {
+//       intention: 'dating',
+//       genderIdentity: 'woman',
+//       genderPreference: 'men',
+//       intentionOpenTo: 'dating',
+//       ageRange: { min: 20, max: 25 },
+//       vibeWords: ['Artsy', 'Planner', 'Curious'],
+//       socialEnergy: 45,
+//       dateBudget: 'low',
+//       dateVibe: ['Artsy', 'Chill'],
+//       distance: 'near',
+//       availability: ['weekends'],
+//       interests: ['Reading', 'Coffee shops', 'Photography', 'Film'],
+//     },
+//   },
+//   {
+//     uid: 'sample-ethan',
+//     firstName: 'Ethan',
+//     lastName: 'Sample',
+//     fullName: 'Ethan Sample',
+//     age: 20,
+//     yearAtUf: 'Sophomore',
+//     bio: 'Outgoing and social, always down to try a new spot in town.',
+//     gender: 'man',
+//     intention: 'dating',
+//     interests: ['Concerts', 'Thrifting', 'Coffee shops', 'Travel'],
+//     dateVibe: ['Foodie', 'Surprise me'],
+//     dateBudget: 'mid',
+//     preferences: {
+//       intention: 'dating',
+//       genderIdentity: 'man',
+//       genderPreference: 'women',
+//       intentionOpenTo: 'either',
+//       ageRange: { min: 18, max: 24 },
+//       vibeWords: ['Spontaneous', 'Social', 'Foodie'],
+//       socialEnergy: 80,
+//       dateBudget: 'mid',
+//       dateVibe: ['Foodie', 'Surprise me'],
+//       distance: 'anywhere',
+//       availability: ['either'],
+//       interests: ['Concerts', 'Thrifting', 'Coffee shops', 'Travel'],
+//     },
+//   },
+//   {
+//     uid: 'sample-jordan',
+//     firstName: 'Jordan',
+//     lastName: 'Sample',
+//     fullName: 'Jordan Sample',
+//     age: 22,
+//     yearAtUf: 'Senior',
+//     bio: 'Gym regular who likes active first dates and football weekends.',
+//     gender: 'man',
+//     intention: 'either',
+//     interests: ['Gym', 'Football games', 'Pickleball', 'Hiking'],
+//     dateVibe: ['Active'],
+//     dateBudget: 'free',
+//     preferences: {
+//       intention: 'either',
+//       genderIdentity: 'man',
+//       genderPreference: 'women',
+//       intentionOpenTo: 'either',
+//       ageRange: { min: 19, max: 25 },
+//       vibeWords: ['Athletic', 'Spontaneous', 'Adventurous'],
+//       socialEnergy: 72,
+//       dateBudget: 'free',
+//       dateVibe: ['Active'],
+//       distance: 'near',
+//       availability: ['weekdays'],
+//       interests: ['Gym', 'Football games', 'Pickleball', 'Hiking'],
+//     },
+//   },
+//   {
+//     uid: 'sample-dylan',
+//     firstName: 'Dylan',
+//     lastName: 'Sample',
+//     fullName: 'Dylan Sample',
+//     age: 21,
+//     yearAtUf: 'Junior',
+//     bio: 'Low-key gamer and foodie who likes good playlists and better conversation.',
+//     gender: 'man',
+//     intention: 'dating',
+//     interests: ['Board games', 'Coffee shops', 'Trying new restaurants', 'Music', 'Gaming', 'Travel'],
+//     dateVibe: ['Foodie', 'Surprise me', 'Chill'],
+//     dateBudget: 'low',
+//     preferences: {
+//       intention: 'dating',
+//       genderIdentity: 'man',
+//       genderPreference: 'women',
+//       intentionOpenTo: 'either',
+//       ageRange: { min: 18, max: 25 },
+//       vibeWords: ['Foodie', 'Night owl', 'Curious'],
+//       socialEnergy: 30,
+//       dateBudget: 'low',
+//       dateVibe: ['Foodie', 'Surprise me', 'Chill'],
+//       distance: 'anywhere',
+//       availability: ['either'],
+//       interests: ['Board games', 'Coffee shops', 'Trying new restaurants', 'Music', 'Gaming', 'Travel'],
+//     },
+//   },
+//   {
+//     uid: 'sample-noah',
+//     firstName: 'Noah',
+//     lastName: 'Sample',
+//     fullName: 'Noah Sample',
+//     age: 21,
+//     yearAtUf: 'Junior',
+//     bio: 'Creative and thoughtful, happiest with art, film, and chill weekends.',
+//     gender: 'man',
+//     intention: 'friendship',
+//     interests: ['Painting', 'Film', 'Photography', 'Board games'],
+//     dateVibe: ['Artsy'],
+//     dateBudget: 'low',
+//     preferences: {
+//       intention: 'friendship',
+//       genderIdentity: 'man',
+//       genderPreference: 'everyone',
+//       intentionOpenTo: 'friendship',
+//       ageRange: { min: 20, max: 24 },
+//       vibeWords: ['Artsy', 'Homebody', 'Planner'],
+//       socialEnergy: 38,
+//       dateBudget: 'low',
+//       dateVibe: ['Artsy'],
+//       distance: 'campus',
+//       availability: ['weekends'],
+//       interests: ['Painting', 'Film', 'Photography', 'Board games'],
+//     },
+//   },
+//   {
+//     uid: 'sample-nina',
+//     firstName: 'Nina',
+//     lastName: 'Sample',
+//     fullName: 'Nina Sample',
+//     age: 19,
+//     yearAtUf: 'Freshman',
+//     bio: 'Friendly and easygoing, into coffee runs, trivia nights, and games.',
+//     gender: 'woman',
+//     intention: 'either',
+//     interests: ['Coffee shops', 'Reading', 'Gaming', 'Trivia nights'],
+//     dateVibe: ['Chill', 'Foodie'],
+//     dateBudget: 'low',
+//     preferences: {
+//       intention: 'either',
+//       genderIdentity: 'woman',
+//       genderPreference: 'everyone',
+//       intentionOpenTo: 'either',
+//       ageRange: { min: 18, max: 22 },
+//       vibeWords: ['Curious', 'Early bird', 'Chill'],
+//       socialEnergy: 55,
+//       dateBudget: 'low',
+//       dateVibe: ['Chill', 'Foodie'],
+//       distance: 'campus',
+//       availability: ['either'],
+//       interests: ['Coffee shops', 'Reading', 'Gaming', 'Trivia nights'],
+//     },
+//   },
+//   {
+//     uid: 'sample-liam',
+//     firstName: 'Liam',
+//     lastName: 'Sample',
+//     fullName: 'Liam Sample',
+//     age: 23,
+//     yearAtUf: 'Graduate',
+//     bio: 'Planner with foodie energy who enjoys weekend adventures and live music.',
+//     gender: 'man',
+//     intention: 'dating',
+//     interests: ['Trying new restaurants', 'Travel', 'Music', 'Cooking'],
+//     dateVibe: ['Foodie', 'Surprise me'],
+//     dateBudget: 'mid',
+//     preferences: {
+//       intention: 'dating',
+//       genderIdentity: 'man',
+//       genderPreference: 'women',
+//       intentionOpenTo: 'dating',
+//       ageRange: { min: 22, max: 28 },
+//       vibeWords: ['Foodie', 'Planner', 'Night owl'],
+//       socialEnergy: 67,
+//       dateBudget: 'mid',
+//       dateVibe: ['Foodie', 'Surprise me'],
+//       distance: 'anywhere',
+//       availability: ['weekends'],
+//       interests: ['Trying new restaurants', 'Travel', 'Music', 'Cooking'],
+//     },
+//   },
+// ];
 
 const normalizeEmail = (email: string) => email.trim().toLowerCase();
 const isUflEmail = (email: string) => normalizeEmail(email).endsWith('@ufl.edu');
@@ -519,23 +534,19 @@ const isIntentionCompatible = (seekerIntention: string, candidateIntention: stri
 
   return seekerIntention === candidateIntention;
 };
-const passesDealBreakers = (viewer: UserProfile, candidate: UserProfile) => {
-  const candidateFitsViewer =
-    isGenderAllowed(viewer.genderPreference, candidate.gender) &&
-    candidate.age >= viewer.ageRange.min &&
-    candidate.age <= viewer.ageRange.max &&
-    isIntentionCompatible(viewer.intentionOpenTo, candidate.intention);
-
-  const viewerFitsCandidate =
-    isGenderAllowed(candidate.genderPreference, viewer.gender) &&
-    viewer.age >= candidate.ageRange.min &&
-    viewer.age <= candidate.ageRange.max &&
-    isIntentionCompatible(candidate.intentionOpenTo, viewer.intention);
-
-  return candidateFitsViewer && viewerFitsCandidate;
-};
 const labelForIntention = (value: string) =>
   datingIntentionOptions.find((option) => option.value === value)?.label || 'Open to anything';
+const getProfilePhotoUrl = (profile: Partial<UserProfile> & Record<string, unknown>) => {
+  const candidateKeys = [
+    profile.photoUrl,
+    typeof profile.photoURL === 'string' ? profile.photoURL : '',
+    typeof profile.imageUrl === 'string' ? profile.imageUrl : '',
+    typeof profile.avatarUrl === 'string' ? profile.avatarUrl : '',
+    typeof profile.profilePhotoUrl === 'string' ? profile.profilePhotoUrl : '',
+  ];
+
+  return candidateKeys.find((value) => typeof value === 'string' && value.trim()) || '';
+};
 const profileToDater = (profileEntry: UserProfile): Dater => {
   const topVibe = profileEntry.preferences.vibeWords[0] || profileEntry.dateVibe[0] || 'Good energy';
   const interestSummary = profileEntry.preferences.interests.slice(0, 3).join(', ');
@@ -559,6 +570,7 @@ const profileToDater = (profileEntry: UserProfile): Dater => {
       'New connection at UF',
     compatibility: 0,
     vibe: topVibe,
+    image: getProfilePhotoUrl(profileEntry),
   };
 };
 const normalizePreferences = (preferences: Partial<Preferences> | undefined): Preferences => ({
@@ -612,12 +624,15 @@ const normalizeUserProfile = (rawProfile: Partial<UserProfile>, uid: string): Us
     distance: rawProfile.distance || preferences.distance,
     availability: Array.isArray(rawProfile.availability) ? rawProfile.availability : preferences.availability,
     email: rawProfile.email || '',
-    photoUrl: rawProfile.photoUrl || '',
+    photoUrl: getProfilePhotoUrl(rawProfile),
     preferences,
     likedUsers: Array.isArray(rawProfile.likedUsers) ? rawProfile.likedUsers : [],
     passedUsers: Array.isArray(rawProfile.passedUsers) ? rawProfile.passedUsers : [],
     matches: Array.isArray(rawProfile.matches) ? rawProfile.matches : [],
     blockedUsers: Array.isArray(rawProfile.blockedUsers) ? rawProfile.blockedUsers : [],
+    conversations: rawProfile.conversations && typeof rawProfile.conversations === 'object'
+      ? (rawProfile.conversations as Record<string, string>)
+      : {},
     onboardingCompleted: rawProfile.onboardingCompleted ?? false,
     createdAt: rawProfile.createdAt,
   };
@@ -645,36 +660,124 @@ const compareProfilesByPreferences = (current: UserProfile, candidate: UserProfi
 
   return Math.min(score, 100);
 };
-const buildSampleDiscoveryFeed = (currentProfile?: UserProfile) => {
-  const normalizedSamples = sampleDiscoveryProfiles
-    .map((sampleProfile) => normalizeUserProfile(sampleProfile, sampleProfile.uid));
-
-  if (!currentProfile) {
-    return normalizedSamples.map((sampleProfile) => ({
-      ...profileToDater(sampleProfile),
-      compatibility: 0,
-    }));
-  }
-
-  return normalizedSamples
-    .filter((sampleProfile) => !currentProfile.likedUsers.includes(sampleProfile.uid))
-    .filter((sampleProfile) => !currentProfile.passedUsers.includes(sampleProfile.uid))
-    .map((sampleProfile) => ({
-      sampleProfile,
-      score: compareProfilesByPreferences(currentProfile, sampleProfile),
-    }))
-    .sort((left, right) => right.score - left.score)
-    .map(({ sampleProfile, score }) => ({
-      ...profileToDater(sampleProfile),
-      compatibility: score,
-    }));
-};
+// const buildSampleDiscoveryFeed = (_currentProfile?: UserProfile) => [] as Dater[];
 const isOfflineFirestoreError = (value: unknown) =>
   value instanceof Error &&
   (value.message.toLowerCase().includes('client is offline') ||
     value.message.toLowerCase().includes('offline') ||
     value.message.toLowerCase().includes('unavailable'));
 const getProfileStorageKey = (uid: string) => `gator-dater-profile:${uid}`;
+const buildFirestoreUserProfile = (nextProfile: UserProfile) => ({
+  uid: nextProfile.uid,
+  firstName: nextProfile.firstName,
+  lastName: nextProfile.lastName,
+  fullName: nextProfile.fullName,
+  name: nextProfile.name,
+  age: nextProfile.age,
+  yearAtUf: nextProfile.yearAtUf,
+  bio: nextProfile.bio,
+  email: nextProfile.email,
+  photoUrl: nextProfile.photoUrl,
+  photoURL: nextProfile.photoUrl,
+  preferences: nextProfile.preferences,
+  likedUsers: nextProfile.likedUsers,
+  passedUsers: nextProfile.passedUsers,
+  matches: nextProfile.matches,
+  blockedUsers: nextProfile.blockedUsers,
+  conversations: nextProfile.conversations || {},
+  onboardingCompleted: nextProfile.onboardingCompleted,
+  createdAt: nextProfile.createdAt || serverTimestamp(),
+  gender: deleteField(),
+  genderPreference: deleteField(),
+  intentionOpenTo: deleteField(),
+  ageRange: deleteField(),
+  intention: deleteField(),
+  interests: deleteField(),
+  dateBudget: deleteField(),
+  dateVibe: deleteField(),
+  distance: deleteField(),
+  availability: deleteField(),
+});
+const getChatStorageKey = (leftUserId: string, rightUserId: string) =>
+  `gator-dater-chat:${[leftUserId, rightUserId].sort().join('__')}`;
+const getConversationId = (leftUserId: string, rightUserId: string) => {
+  // console.log('uid1 raw:', JSON.stringify(leftUserId));
+  // console.log('uid2 raw:', JSON.stringify(rightUserId));
+  // console.log('uid1 length:', leftUserId.length);
+  // console.log('uid2 length:', rightUserId.length);
+
+  return [leftUserId, rightUserId].sort().join('_');
+};
+const getConversationParticipantIds = (leftUserId: string, rightUserId: string) =>
+  [leftUserId, rightUserId].sort();
+const mergeChatMessages = (primary: ChatMessage[], secondary: ChatMessage[]) => {
+  const mergedMessages = new Map<string, ChatMessage>();
+
+  [...primary, ...secondary].forEach((message) => {
+    mergedMessages.set(message.id, message);
+  });
+
+  return Array.from(mergedMessages.values()).sort((leftMessage, rightMessage) => {
+    if (leftMessage.sentAt === rightMessage.sentAt) {
+      return leftMessage.id.localeCompare(rightMessage.id);
+    }
+
+    return leftMessage.sentAt - rightMessage.sentAt;
+  });
+};
+const loadLocalChatMessages = (leftUserId: string, rightUserId: string): ChatMessage[] => {
+  if (typeof window === 'undefined') {
+    return [] as ChatMessage[];
+  }
+
+  try {
+    const storedMessages = window.localStorage.getItem(getChatStorageKey(leftUserId, rightUserId));
+
+    if (!storedMessages) {
+      return [];
+    }
+
+    const parsedMessages = JSON.parse(storedMessages) as Array<Partial<ChatMessage> & { status?: unknown }>;
+
+    return parsedMessages
+      .map((message): ChatMessage => ({
+        id: String(message.id || ''),
+        senderId: String(message.senderId || ''),
+        senderName: String(message.senderName || ''),
+        text: String(message.text || ''),
+        sentAt: Number(message.sentAt || 0),
+        status: ((message.status === 'pending' || message.status === 'failed')
+          ? message.status
+          : 'sent') as ChatMessage['status'],
+      }))
+      .filter((message) => Boolean(message.id) && Boolean(message.senderId) && Boolean(message.text));
+  } catch {
+    return [];
+  }
+};
+const saveLocalChatMessages = (leftUserId: string, rightUserId: string, messages: ChatMessage[]) => {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  window.localStorage.setItem(getChatStorageKey(leftUserId, rightUserId), JSON.stringify(messages));
+};
+const buildConversationPayload = (leftUserId: string, rightUserId: string) => ({
+  participants: [leftUserId, rightUserId],
+  createdAt: serverTimestamp(),
+  lastMessage: '',
+  lastMessageAt: serverTimestamp(),
+});
+const formatChatTime = (timestamp: number) => {
+  if (!timestamp) {
+    return '';
+  }
+
+  return new Date(timestamp).toLocaleTimeString([], {
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+};
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>('intro');
@@ -694,7 +797,12 @@ export default function App() {
   const [likesModalOpen, setLikesModalOpen] = useState(false);
   const [matchesModalOpen, setMatchesModalOpen] = useState(false);
   const [matchedDaters, setMatchedDaters] = useState<Dater[]>([]);
-  const [discoveryFeed, setDiscoveryFeed] = useState<Dater[]>(() => buildSampleDiscoveryFeed());
+  const [selectedMatchId, setSelectedMatchId] = useState('');
+  const [chatDraft, setChatDraft] = useState('');
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatError, setChatError] = useState('');
+  const [conversationReadBy, setConversationReadBy] = useState<Record<string, number>>({});
+  const [discoveryFeed, setDiscoveryFeed] = useState<Dater[]>([]);
   const [discoveryFeedSource, setDiscoveryFeedSource] = useState<'sample' | 'firestore'>('sample');
   const [preferencesSection, setPreferencesSection] = useState<'preferences' | 'deal-breakers'>('preferences');
   const profilePhotoInputRef = useRef<HTMLInputElement | null>(null);
@@ -757,15 +865,70 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (!db || !currentUser) {
+      return;
+    }
+
+    const userRef = doc(db, 'users', currentUser.uid);
+
+    return onSnapshot(
+      userRef,
+      (snapshot) => {
+        if (!snapshot.exists()) {
+          return;
+        }
+
+        const liveProfile = normalizeUserProfile(
+          snapshot.data() as Partial<UserProfile>,
+          currentUser.uid,
+        );
+
+        setFirestoreHealth('connected');
+        saveLocalProfile(currentUser.uid, liveProfile);
+        setProfile((current) => {
+          if (!current) {
+            return liveProfile;
+          }
+
+          return JSON.stringify(current) === JSON.stringify(liveProfile)
+            ? current
+            : liveProfile;
+        });
+      },
+      () => {
+        setFirestoreHealth('fallback');
+      },
+    );
+  }, [currentUser]);
+
+  useEffect(() => {
     if (!currentUser || !profile || screen !== 'home') {
       return;
     }
 
-    void loadDiscoveryFeed(currentUser, profile).catch(() => {
-      setDiscoveryFeed(buildSampleDiscoveryFeed(profile));
-      setDiscoveryFeedSource('sample');
+    void loadDiscoveryFeed(currentUser, profile).catch((loadError: unknown) => {
+      const code =
+        typeof loadError === 'object' &&
+        loadError !== null &&
+        'code' in loadError
+          ? String((loadError as { code?: unknown }).code)
+          : 'unknown';
+      const message =
+        loadError instanceof Error
+          ? loadError.message
+          : 'unknown error';
+
+      setDiscoveryFeed([]);
+      setDiscoveryFeedSource('firestore');
+      //for firebase accounts info
+      // setDiscoveryDebug(
+      //   `DEBUG discovery: Firestore load failed (code=${code}, message=${message}); showing sample profiles only.`,
+      // );
+      if (isOfflineFirestoreError(loadError)) {
+        setFirestoreHealth('fallback');
+      }
       setSwipeIndex(0);
-      setStatus('Using sample daters while the discovery feed loads.');
+      setStatus('Using fallback daters while the discovery feed loads.');
     });
   }, [currentUser, profile, screen]);
 
@@ -777,6 +940,124 @@ export default function App() {
 
     void loadLikedDaters(profile);
   }, [currentUser, profile]);
+
+  useEffect(() => {
+    if (!currentUser || !profile) {
+      setMatchedDaters([]);
+      return;
+    }
+
+    void loadMatchedDaters();
+  }, [currentUser, profile]);
+
+  useEffect(() => {
+    if (!matchedDaters.length) {
+      setSelectedMatchId('');
+      return;
+    }
+
+    setSelectedMatchId((currentSelected) =>
+      currentSelected && matchedDaters.some((dater) => dater.id === currentSelected)
+        ? currentSelected
+        : '',
+    );
+  }, [matchedDaters]);
+
+  useEffect(() => {
+    if (!db || !currentUser || !selectedMatchId) {
+      setChatMessages([]);
+      setConversationReadBy({});
+      return;
+    }
+
+    let unsubscribeMessages = () => {};
+    let unsubscribeConversation = () => {};
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        if (cancelled) {
+          return;
+        }
+
+        const conversationId = getConversationId(currentUser.uid, selectedMatchId);
+        const conversationRef = doc(db, 'conversations', conversationId);
+        const conversationSnap = await getDoc(conversationRef);
+
+        if (!conversationSnap.exists()) {
+          setChatMessages([]);
+          setConversationReadBy({});
+          return;
+        }
+
+        const messagesQuery = query(
+          collection(db, 'conversations', conversationId, 'messages'),
+          orderBy('sentAt', 'asc'),
+          limit(200),
+        );
+
+        unsubscribeMessages = onSnapshot(
+          messagesQuery,
+          (snapshot) => {
+            const nextMessages = snapshot.docs.map((snapshotDoc): ChatMessage => ({
+              id: snapshotDoc.id,
+              senderId: String(snapshotDoc.data().senderId || ''),
+              senderName: String(snapshotDoc.data().senderName || ''),
+              text: String(snapshotDoc.data().text || ''),
+              sentAt: Number(snapshotDoc.data().sentAt || 0),
+              status: 'sent',
+            }));
+
+            setChatMessages((current) => mergeChatMessages(current, nextMessages));
+          },
+          () => {
+            setChatMessages([]);
+          },
+        );
+
+        unsubscribeConversation = onSnapshot(
+          conversationRef,
+          (snapshot) => {
+            const readByRaw = snapshot.data()?.lastReadAtBy;
+
+            if (!readByRaw || typeof readByRaw !== 'object') {
+              setConversationReadBy({});
+              return;
+            }
+
+            const normalizedReadBy = Object.entries(readByRaw as Record<string, unknown>).reduce<Record<string, number>>(
+              (accumulator, [uid, value]) => {
+                const numericValue = Number(value);
+
+                if (!Number.isNaN(numericValue) && numericValue > 0) {
+                  accumulator[uid] = numericValue;
+                }
+
+                return accumulator;
+              },
+              {},
+            );
+
+            setConversationReadBy(normalizedReadBy);
+          },
+          () => {
+            setConversationReadBy({});
+          },
+        );
+      } catch {
+        if (!cancelled) {
+          setChatMessages([]);
+          setConversationReadBy({});
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      unsubscribeMessages();
+      unsubscribeConversation();
+    };
+  }, [currentUser, selectedMatchId]);
 
   const resetMessages = () => {
     setError('');
@@ -877,7 +1158,7 @@ export default function App() {
 
     try {
       if (db) {
-        await setDoc(doc(db, 'users', currentUser.uid), updatedProfile, { merge: true });
+        await setDoc(doc(db, 'users', currentUser.uid), buildFirestoreUserProfile(updatedProfile), { merge: true });
         setFirestoreHealth('connected');
       }
 
@@ -1229,7 +1510,7 @@ export default function App() {
 
       saveLocalProfile(currentUser.uid, nextProfile);
 
-      await setDoc(doc(db, 'users', currentUser.uid), nextProfile, { merge: true });
+      await setDoc(doc(db, 'users', currentUser.uid), buildFirestoreUserProfile(nextProfile), { merge: true });
       setFirestoreHealth('connected');
       await updateProfile(currentUser, {
         displayName: nextProfile.fullName,
@@ -1307,25 +1588,50 @@ export default function App() {
   };
 
   const handleContinueFromAllSet = () => {
-    if (currentUser && profile) {
-      void findTopPreferenceMatches(currentUser.uid, profile)
-        .then((matches) => {
-          if (matches.length) {
-            setStatus(`Found ${matches.length} potential matches from profile preferences.`);
-          }
-        })
-        .catch(() => {
-          setStatus('');
-        });
-    }
-
     setScreen('home');
     setActiveTab('swipe');
+
+    if (!currentUser || !profile) {
+      return;
+    }
+
+    const nextProfile = profile.onboardingCompleted
+      ? profile
+      : {
+          ...profile,
+          onboardingCompleted: true,
+        };
+
+    if (!profile.onboardingCompleted) {
+      setProfile(nextProfile);
+      saveLocalProfile(currentUser.uid, nextProfile);
+
+      if (db) {
+        void setDoc(
+          doc(db, 'users', currentUser.uid),
+          { onboardingCompleted: true },
+          { merge: true },
+        ).catch(() => {
+          setFirestoreHealth('fallback');
+        });
+      }
+    }
+
+    void findTopPreferenceMatches(currentUser.uid, nextProfile)
+      .then((matches) => {
+        if (matches.length) {
+          setStatus(`Found ${matches.length} potential matches from profile preferences.`);
+        }
+      })
+      .catch(() => {
+        setStatus('');
+      });
   };
 
   const handleOpenPreferences = () => {
     setProfileForm((current) => ({
       ...current,
+      bio: profile?.bio || current.bio,
       intention: profile?.preferences.intention || current.intention,
       genderIdentity: profile?.preferences.genderIdentity || current.genderIdentity,
       genderPreference: profile?.preferences.genderPreference || current.genderPreference,
@@ -1406,7 +1712,7 @@ export default function App() {
       name: fullName,
       age: profile?.age || Number(profileForm.age) || 18,
       yearAtUf: profile?.yearAtUf || profileForm.yearAtUf || '',
-      bio: profile?.bio || profileForm.bio || '',
+      bio: profileForm.bio.trim() || profile?.bio || '',
       gender: nextPreferences.genderIdentity,
       genderPreference: nextPreferences.genderPreference,
       intentionOpenTo: nextPreferences.intentionOpenTo,
@@ -1433,23 +1739,7 @@ export default function App() {
 
     try {
       if (db) {
-        await setDoc(
-          doc(db, 'users', currentUser.uid),
-          {
-            preferences: nextPreferences,
-            gender: updatedProfile.gender,
-            genderPreference: updatedProfile.genderPreference,
-            intentionOpenTo: updatedProfile.intentionOpenTo,
-            ageRange: updatedProfile.ageRange,
-            intention: updatedProfile.intention,
-            interests: updatedProfile.interests,
-            dateBudget: updatedProfile.dateBudget,
-            dateVibe: updatedProfile.dateVibe,
-            distance: updatedProfile.distance,
-            availability: updatedProfile.availability,
-          },
-          { merge: true },
-        );
+        await setDoc(doc(db, 'users', currentUser.uid), buildFirestoreUserProfile(updatedProfile), { merge: true });
         setFirestoreHealth('connected');
       }
 
@@ -1482,7 +1772,6 @@ export default function App() {
 
     const profilesQuery = query(
       collection(db, 'users'),
-      where('onboardingCompleted', '==', true),
       limit(50),
     );
     const snapshot = await getDocs(profilesQuery);
@@ -1506,15 +1795,16 @@ export default function App() {
 
   const loadDiscoveryFeed = async (currentUserEntry: User, currentProfile: UserProfile) => {
     if (!db) {
-      setDiscoveryFeed(buildSampleDiscoveryFeed(currentProfile));
-      setDiscoveryFeedSource('sample');
+      setDiscoveryFeed([]);
+      setDiscoveryFeedSource('firestore');
+      //for firebase accounts info
+      // setDiscoveryDebug('DEBUG discovery: Firestore not configured; showing sample profiles only.');
       setSwipeIndex(0);
       return;
     }
 
     const discoveryQuery = query(
       collection(db, 'users'),
-      where('onboardingCompleted', '==', true),
       limit(100),
     );
 
@@ -1523,16 +1813,15 @@ export default function App() {
     const currentPassedUsers = new Set(currentProfile.passedUsers);
     const currentBlockedUsers = new Set(currentProfile.blockedUsers || []);
 
-    // Stage 1: hard filters (both sides must pass each other's deal-breakers).
-    const remoteCandidates = snapshot.docs
+    const baseRemoteCandidates = snapshot.docs
       .map((profileDoc) => normalizeUserProfile(profileDoc.data() as Partial<UserProfile>, profileDoc.id))
       .filter((candidateProfile) => candidateProfile.uid !== currentUserEntry.uid)
       .filter((candidateProfile) => !currentLikedUsers.has(candidateProfile.uid))
       .filter((candidateProfile) => !currentPassedUsers.has(candidateProfile.uid))
       .filter((candidateProfile) => !candidateProfile.blockedUsers.includes(currentUserEntry.uid))
-      .filter((candidateProfile) => !currentBlockedUsers.has(candidateProfile.uid))
-      .filter((candidateProfile) => passesDealBreakers(currentProfile, candidateProfile))
-      // Stage 2: soft scoring to rank, not hide, compatible candidates.
+      .filter((candidateProfile) => !currentBlockedUsers.has(candidateProfile.uid));
+
+    const remoteCandidates = baseRemoteCandidates
       .map((candidateProfile) => ({
         candidateProfile,
         score: compareProfilesByPreferences(currentProfile, candidateProfile),
@@ -1543,6 +1832,13 @@ export default function App() {
         compatibility: score,
       }));
 
+    // const sampleCandidates: Dater[] = [];
+
+    //for firebase accounts info
+    // setDiscoveryDebug(
+    //   `DEBUG discovery: firestoreDocs=${snapshot.docs.length} eligibleFirebase=${baseRemoteCandidates.length} firebaseShown=${remoteCandidates.length} sampleAppended=${sampleCandidates.length} totalFeed=${remoteCandidates.length + sampleCandidates.length}`,
+    // );
+
     if (remoteCandidates.length) {
       setDiscoveryFeed(remoteCandidates);
       setDiscoveryFeedSource('firestore');
@@ -1550,32 +1846,83 @@ export default function App() {
       return;
     }
 
-    setDiscoveryFeed(buildSampleDiscoveryFeed(currentProfile));
-    setDiscoveryFeedSource('sample');
+    setDiscoveryFeed([]);
+    setDiscoveryFeedSource('firestore');
+    //for firebase accounts info
+    // setDiscoveryDebug(
+    //   `DEBUG discovery: firestoreDocs=${snapshot.docs.length} eligibleFirebase=${baseRemoteCandidates.length} firebaseShown=0; using sample fallback`,
+    // );
     setSwipeIndex(0);
   };
 
   const loadMatchedDaters = async () => {
-    if (!db || !profile?.matches.length) {
+    if (!db || !profile || !currentUser) {
       setMatchedDaters([]);
       return;
     }
 
     const firestore = db;
+    const candidateMatchIds = Array.from(
+      new Set([...(profile.matches || []), ...(profile.likedUsers || [])]),
+    );
+
+    if (!candidateMatchIds.length) {
+      setMatchedDaters([]);
+      return;
+    }
 
     const matchDocs = await Promise.all(
-      profile.matches.map(async (matchId) => {
+      candidateMatchIds.map(async (matchId) => {
         const matchDoc = await getDoc(doc(firestore, 'users', matchId));
 
         if (!matchDoc.exists()) {
           return null;
         }
 
-        return profileToDater(normalizeUserProfile(matchDoc.data() as Partial<UserProfile>, matchId));
+        const candidateProfile = normalizeUserProfile(
+          matchDoc.data() as Partial<UserProfile>,
+          matchId,
+        );
+        const isMutualLike = candidateProfile.likedUsers.includes(currentUser.uid);
+        const isMutualMatch = candidateProfile.matches.includes(currentUser.uid) || isMutualLike;
+        const wasRecordedMatch = profile.matches.includes(matchId);
+
+        if (!isMutualMatch && !wasRecordedMatch) {
+          return null;
+        }
+
+        return {
+          ...profileToDater(candidateProfile),
+          compatibility: compareProfilesByPreferences(profile, candidateProfile),
+        };
       }),
     );
 
-    setMatchedDaters(matchDocs.filter((match): match is Dater => Boolean(match)));
+    const nextMatchedDaters = matchDocs.filter((match): match is Dater => Boolean(match));
+    const nextMatchIds = nextMatchedDaters.map((match) => match.id);
+
+    setMatchedDaters(nextMatchedDaters);
+
+    const existingMatches = profile.matches || [];
+    const hasMatchListChanged =
+      nextMatchIds.length !== existingMatches.length ||
+      nextMatchIds.some((matchId) => !existingMatches.includes(matchId));
+
+    if (hasMatchListChanged) {
+      const syncedProfile = {
+        ...profile,
+        matches: nextMatchIds,
+      };
+
+      setProfile(syncedProfile);
+      saveLocalProfile(currentUser.uid, syncedProfile);
+
+      await setDoc(
+        doc(firestore, 'users', currentUser.uid),
+        { matches: nextMatchIds },
+        { merge: true },
+      );
+    }
   };
 
   const loadLikedDaters = async (currentProfile: UserProfile) => {
@@ -1584,15 +1931,14 @@ export default function App() {
       return;
     }
 
-    const sampleProfileMap = new Map(
-      sampleDiscoveryProfiles.map((sampleProfile) => [
-        sampleProfile.uid,
-        normalizeUserProfile(sampleProfile, sampleProfile.uid),
-      ]),
-    );
+    // const sampleProfileMap = new Map<string, UserProfile>();
 
     const likedCards = await Promise.all(
       currentProfile.likedUsers.map(async (likedUserId) => {
+        if (currentProfile.matches.includes(likedUserId)) {
+          return null;
+        }
+
         if (db) {
           try {
             const likedUserDoc = await getDoc(doc(db, 'users', likedUserId));
@@ -1602,6 +1948,11 @@ export default function App() {
                 likedUserDoc.data() as Partial<UserProfile>,
                 likedUserId,
               );
+
+              if (likedProfile.likedUsers.includes(currentProfile.uid)) {
+                return null;
+              }
+
               return {
                 ...profileToDater(likedProfile),
                 compatibility: compareProfilesByPreferences(currentProfile, likedProfile),
@@ -1612,20 +1963,238 @@ export default function App() {
           }
         }
 
-        const sampleFallback = sampleProfileMap.get(likedUserId);
-
-        if (sampleFallback) {
-          return {
-            ...profileToDater(sampleFallback),
-            compatibility: compareProfilesByPreferences(currentProfile, sampleFallback),
-          };
-        }
-
         return null;
       }),
     );
 
     setLikedDaters(likedCards.filter((card): card is Dater => Boolean(card)));
+  };
+
+  const ensureConversationExists = async (leftUserId: string, rightUserId: string) => {
+    if (!db) {
+      return;
+    }
+
+    const conversationId = getConversationId(leftUserId, rightUserId);
+    const conversationRef = doc(db, 'conversations', conversationId);
+
+    // Create or update the conversation first so a denied pre-read cannot block creation.
+    await setDoc(
+      conversationRef,
+      {
+        participants: [leftUserId, rightUserId],
+        createdAt: serverTimestamp(),
+        lastMessage: '',
+        lastMessageAt: serverTimestamp(),
+      },
+      { merge: true },
+    );
+
+    try {
+      const conversationSnap = await getDoc(conversationRef);
+      // console.log('conversation exists after ensure:', conversationSnap.exists());
+      // console.log('conversation data after ensure:', JSON.stringify(conversationSnap.data() || null));
+    } catch (readError) {
+      const code =
+        typeof readError === 'object' &&
+        readError !== null &&
+        'code' in readError
+          ? String((readError as { code?: unknown }).code)
+          : 'unknown';
+      const message =
+        readError instanceof Error
+          ? readError.message
+          : 'Unknown conversation read error';
+      // console.log(`ensureConversationExists read-back failed: (${code}) ${message}`);
+    }
+  };
+
+  const persistChatMessage = async (message: ChatMessage) => {
+    if (!db || !currentUser || !profile || !selectedMatchId) {
+      return;
+    }
+
+    const conversationId = getConversationId(currentUser.uid, selectedMatchId);
+    const conversationRef = doc(db, 'conversations', conversationId);
+    const messageRef = doc(db, 'conversations', conversationId, 'messages', message.id);
+
+    // Temporary debug instrumentation for rules troubleshooting.
+    // console.log('--- sendMessage debug ---');
+    // console.log('senderId:', currentUser.uid);
+    // console.log('conversationId:', conversationId);
+    // console.log('auth uid:', auth?.currentUser?.uid || null);
+
+    const currentUid = auth?.currentUser?.uid || '';
+
+    if (!currentUid) {
+      // console.error('PROBLEM: No authenticated user found');
+      throw new Error('No authenticated user found.');
+    }
+
+    try {
+      const conversationSnap = await getDoc(conversationRef);
+      // console.log('conversation exists:', conversationSnap.exists());
+      // console.log('conversation data:', conversationSnap.data() || null);
+
+      if (!conversationSnap.exists()) {
+        // console.error('PROBLEM: Conversation document does not exist yet!');
+      }
+
+      const participantsRaw = conversationSnap.data()?.participants;
+      const participants = Array.isArray(participantsRaw)
+        ? participantsRaw.map((entry) => String(entry))
+        : [];
+
+      // console.log('participants:', participants);
+      // console.log('current user in participants:', participants.includes(currentUid));
+    } catch (conversationReadError) {
+      const code =
+        typeof conversationReadError === 'object' &&
+        conversationReadError !== null &&
+        'code' in conversationReadError
+          ? String((conversationReadError as { code?: unknown }).code)
+          : 'unknown';
+      const message =
+        conversationReadError instanceof Error
+          ? conversationReadError.message
+          : 'Unknown conversation read error';
+      // console.error(`PROBLEM: Conversation read blocked before send. (${code}) ${message}`);
+    }
+
+    const batch = writeBatch(db);
+
+    batch.set(
+      conversationRef,
+      {
+        participants: [currentUser.uid, selectedMatchId],
+        updatedAt: serverTimestamp(),
+        lastMessage: message.text,
+        lastMessageSenderId: currentUser.uid,
+        lastMessageSenderName: message.senderName,
+        lastMessageAt: serverTimestamp(),
+      },
+      { merge: true },
+    );
+
+    batch.set(messageRef, {
+      senderId: currentUser.uid,
+      senderName: message.senderName,
+      text: message.text,
+      sentAt: message.sentAt,
+      createdAt: serverTimestamp(),
+      type: 'text',
+    });
+
+    // console.log('attempting batch commit for conversation + message');
+    await batch.commit();
+    // console.log('batch commit succeeded');
+  };
+
+  const handleSendChatMessage = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    if (!db || !currentUser || !profile || !selectedMatchId) {
+      return;
+    }
+
+    if (!matchedDaters.some((dater) => dater.id === selectedMatchId)) {
+      setChatError('You can only message someone after you both match.');
+      return;
+    }
+
+    const messageText = chatDraft.trim();
+
+    if (!messageText) {
+      return;
+    }
+
+    setChatError('');
+    const senderName = profile.fullName || currentUser.displayName || 'User';
+    const optimisticMessage: ChatMessage = {
+      id: doc(collection(db, 'conversations', getConversationId(currentUser.uid, selectedMatchId), 'messages')).id,
+      senderId: currentUser.uid,
+      senderName,
+      text: messageText,
+      sentAt: Date.now(),
+      status: 'pending',
+    };
+
+    setChatDraft('');
+    setChatMessages((current) => mergeChatMessages(current, [optimisticMessage]));
+
+    try {
+      await ensureConversationExists(currentUser.uid, selectedMatchId);
+      await persistChatMessage(optimisticMessage);
+
+      setChatMessages((current) =>
+        current.map((entry) =>
+          entry.id === optimisticMessage.id ? { ...entry, status: 'sent' } : entry,
+        ),
+      );
+    } catch (sendError) {
+      const code =
+        typeof sendError === 'object' &&
+        sendError !== null &&
+        'code' in sendError
+          ? String((sendError as { code?: unknown }).code)
+          : 'unknown';
+      const errorMessage =
+        sendError instanceof Error
+          ? sendError.message
+          : 'Unknown send error';
+
+      setChatMessages((current) =>
+        current.map((entry) =>
+          entry.id === optimisticMessage.id ? { ...entry, status: 'failed' } : entry,
+        ),
+      );
+      setChatDraft(messageText);
+      setChatError(`Unable to send message. (${code}) ${errorMessage}`);
+    }
+  };
+
+  const handleRetryChatMessage = async (message: ChatMessage) => {
+    if (!db || !currentUser || !profile || !selectedMatchId) {
+      return;
+    }
+
+    setChatError('');
+    setChatMessages((current) =>
+      current.map((entry) =>
+        entry.id === message.id ? { ...entry, status: 'pending' } : entry,
+      ),
+    );
+
+    try {
+      await persistChatMessage({
+        ...message,
+        status: 'pending',
+      });
+
+      setChatMessages((current) =>
+        current.map((entry) =>
+          entry.id === message.id ? { ...entry, status: 'sent' } : entry,
+        ),
+      );
+    } catch (retryError) {
+      const code =
+        typeof retryError === 'object' &&
+        retryError !== null &&
+        'code' in retryError
+          ? String((retryError as { code?: unknown }).code)
+          : 'unknown';
+      const errorMessage =
+        retryError instanceof Error
+          ? retryError.message
+          : 'Unknown send error';
+
+      setChatMessages((current) =>
+        current.map((entry) =>
+          entry.id === message.id ? { ...entry, status: 'failed' } : entry,
+        ),
+      );
+      setChatError(`Unable to send message. (${code}) ${errorMessage}`);
+    }
   };
 
   const handleSignOut = async () => {
@@ -1640,6 +2209,10 @@ export default function App() {
     setLikedDaters([]);
     setMatchesModalOpen(false);
     setMatchedDaters([]);
+    setSelectedMatchId('');
+    setChatDraft('');
+    setChatMessages([]);
+    setChatError('');
   };
 
   const renderFrame = (content: ReactNode) => (
@@ -1751,25 +2324,108 @@ export default function App() {
     }
 
     if (activeTab === 'chats') {
-      return (
-        <section className="home-grid">
-          {/* Example 1: Ava */}
-          <article className="chat-match-row unread">
-            <div className="profile-circle-mini" />
-            <div className="chat-text-meta">
-              <h3 className="chat-name">Ava</h3>
-              <p className="chat-preview">That coffee place looks cute. Want to go Thursday?</p>
-            </div>
-          </article>
+      const selectedMatch = matchedDaters.find((dater) => dater.id === selectedMatchId) || null;
 
-          {/* Example 2: Jordan */}
-          <article className="chat-match-row">
-            <div className="profile-circle-mini" />
-            <div className="chat-text-meta">
-              <h3 className="chat-name">Jordan</h3>
-              <p className="chat-preview">What kind of food do you usually like for first dates?</p>
-            </div>
-          </article>
+      if (!selectedMatch) {
+        return (
+          <section className="home-grid">
+            {matchedDaters.length ? (
+              matchedDaters.map((dater) => (
+                <article
+                  key={dater.id}
+                  className="chat-match-row"
+                  onClick={() => {
+                    setChatError('');
+                    setSelectedMatchId(dater.id);
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      setChatError('');
+                      setSelectedMatchId(dater.id);
+                    }
+                  }}
+                  role="button"
+                  tabIndex={0}
+                >
+                  <div className="profile-circle-mini" style={{ backgroundImage: `url(${dater.image || gatorImg})` }} />
+                  <div className="chat-text-meta">
+                    <h3 className="chat-name">{dater.name}</h3>
+                    <p className="chat-preview">Open conversation</p>
+                  </div>
+                </article>
+              ))
+            ) : (
+              <p className="account-detail">No mutual matches yet. Chats appear once both users like each other.</p>
+            )}
+          </section>
+        );
+      }
+
+      return (
+        <section className="chat">
+          <div className="chat-thread-top">
+            <button className="chat-back-link" type="button" onClick={() => {
+              setChatError('');
+              setSelectedMatchId('');
+            }}>
+              <img src={backArrrow} alt="Back" className="chat-back-icon" />
+              <span>Back to matches</span>
+            </button>
+            <h3 className="chat-thread-name">{selectedMatch.name}</h3>
+          </div>
+          <div className="chat-section">
+            {chatMessages.length ? (
+              chatMessages.map((message) => {
+                const isCurrentUserMessage = message.senderId === currentUser?.uid;
+                const otherUserReadAt = selectedMatch ? conversationReadBy[selectedMatch.id] || 0 : 0;
+                const messageStatus = isCurrentUserMessage
+                  ? otherUserReadAt >= message.sentAt
+                    ? 'Viewed'
+                    : 'Sent'
+                  : '';
+                const timeLabel = formatChatTime(message.sentAt);
+
+                return (
+                  <div
+                    key={message.id}
+                    className={isCurrentUserMessage ? 'message-from-user' : 'message-from-other'}
+                    data-status={message.status || ''}
+                  >
+                    <p>{message.text}</p>
+                    <span className="chat-message-meta">
+                      {timeLabel}
+                      {messageStatus ? ` • ${messageStatus}` : ''}
+                      {message.status === 'failed' ? ' • Failed' : ''}
+                    </span>
+                    {isCurrentUserMessage && message.status === 'failed' ? (
+                      <button
+                        className="chat-retry-button"
+                        type="button"
+                        onClick={() => handleRetryChatMessage(message)}
+                      >
+                        Retry
+                      </button>
+                    ) : null}
+                  </div>
+                );
+              })
+            ) : (
+              <p className="account-detail">No messages yet. Say hi.</p>
+            )}
+          </div>
+
+          <form className="chat-input" onSubmit={handleSendChatMessage}>
+            <input
+              type="text"
+              value={chatDraft}
+              onChange={(event) => setChatDraft(event.target.value)}
+              placeholder={`Message ${selectedMatch.name}`}
+            />
+            <button className="submit-button" type="submit" disabled={!chatDraft.trim()}>
+              <img src={submitImg} alt="Send" className="send-icon" />
+            </button>
+          </form>
+          {chatError ? <p className="error-text chat-error-line">{chatError}</p> : null}
         </section>
       );
     }
@@ -1844,7 +2500,7 @@ export default function App() {
                 }}
                 type="button"
               >
-                View Matches ({profile?.matches.length || 0})
+                View Matches ({matchedDaters.length})
               </button>
               <button className="secondary-button tile-button" onClick={handleSignOut} type="button">
                 Sign Out
@@ -1859,7 +2515,8 @@ export default function App() {
       <>
         <section className="swipe-stack">
           {currentDater ? (
-            <article className="swipe-card" /*style={{ backgroundImage: `url(${currentDater.image})` }} */>
+            <article className="swipe-card">
+              <img className="swipe-card-image" src={currentDater.image || gatorImg} alt={currentDater.name} />
               <p>{currentDater.compatibility}% match</p>
               <h2>
                 {currentDater.name}, {currentDater.age}
@@ -1871,8 +2528,8 @@ export default function App() {
           ) : (
             <article className="swipe-card done-card">
               <p className="account-label">All caught up</p>
-              <h3>No more sample daters</h3>
-              <p>Open your likes from Profile or come back later for more people.</p>
+              <h3>No more daters right now</h3>
+              <p>Check back later or refresh the deck when new people are available.</p>
             </article>
           )}
         </section>
@@ -1884,6 +2541,8 @@ export default function App() {
             <img className="action-btn-icon" src={likeImg} alt="Like" />
           </button>
         </div>
+        {/* //for firebase accounts info */}
+        {/* {discoveryDebug ? <p className="account-detail">{discoveryDebug}</p> : null} */}
       </>
     );
   };
@@ -1905,6 +2564,8 @@ export default function App() {
       ? profile.likedUsers
       : [...(profile?.likedUsers || []), currentDater.id];
 
+    let matchedOnThisLike = false;
+
     if (currentUser && profile) {
       const currentUserRef = db ? doc(db, 'users', currentUser.uid) : null;
       const nextProfile = { ...profile, likedUsers: nextLikedUserIds };
@@ -1913,42 +2574,81 @@ export default function App() {
 
       if (db && discoveryFeedSource === 'firestore') {
         try {
-          const likedUserRef = doc(db, 'users', currentDater.id);
-          const likedUserSnap = await getDoc(likedUserRef);
+          const likedUserSnap = await getDoc(doc(db, 'users', currentDater.id));
           const likedUserProfile = likedUserSnap.exists()
             ? normalizeUserProfile(likedUserSnap.data() as Partial<UserProfile>, currentDater.id)
             : null;
           const matchedBack = !!likedUserProfile?.likedUsers.includes(currentUser.uid);
+          const conversationId = getConversationId(currentUser.uid, currentDater.id);
 
           const nextMatches = matchedBack
             ? Array.from(new Set([...(profile.matches || []), currentDater.id]))
             : profile.matches || [];
-          const nextLikedUserMatches = matchedBack && likedUserProfile
+          const nextConversations = matchedBack
+            ? {
+                ...(profile.conversations || {}),
+                [currentDater.id]: conversationId,
+              }
+            : (profile.conversations || {});
+
+          const likedUserMatches = matchedBack && likedUserProfile
             ? Array.from(new Set([...(likedUserProfile.matches || []), currentUser.uid]))
             : likedUserProfile?.matches || [];
+          const likedUserConversations = matchedBack && likedUserProfile
+            ? {
+                ...(likedUserProfile.conversations || {}),
+                [currentUser.uid]: conversationId,
+              }
+            : (likedUserProfile?.conversations || {});
 
-          if (currentUserRef) {
-            await setDoc(
+          if (matchedBack && currentUserRef && likedUserSnap.exists()) {
+            const likedUserRef = doc(db, 'users', currentDater.id);
+            const conversationRef = doc(db, 'conversations', conversationId);
+            const batch = writeBatch(db);
+
+            batch.set(
               currentUserRef,
-              { likedUsers: nextLikedUserIds, matches: nextMatches },
+              {
+                likedUsers: nextLikedUserIds,
+                matches: nextMatches,
+                conversations: nextConversations,
+              },
               { merge: true },
             );
-          }
-
-          if (matchedBack) {
-            await setDoc(
+            batch.set(
               likedUserRef,
-              { matches: nextLikedUserMatches },
+              {
+                matches: likedUserMatches,
+                conversations: likedUserConversations,
+              },
               { merge: true },
             );
+            batch.set(conversationRef, buildConversationPayload(currentUser.uid, currentDater.id), { merge: true });
 
-            const matchedProfile = { ...nextProfile, matches: nextMatches };
+            await batch.commit();
+
+            const matchedProfile = {
+              ...nextProfile,
+              matches: nextMatches,
+              conversations: nextConversations,
+            };
             setProfile(matchedProfile);
             saveLocalProfile(currentUser.uid, matchedProfile);
-            // Future Gemini integration: use both users' shared interests/dateVibe
-            // to generate a date plan once matching chat/planner is connected.
+            setMatchedDaters((current) =>
+              current.some((dater) => dater.id === currentDater.id)
+                ? current
+                : [currentDater, ...current],
+            );
+            matchedOnThisLike = true;
             setStatus('It\'s a match!');
+          } else if (currentUserRef) {
+            await setDoc(
+              currentUserRef,
+              { likedUsers: nextLikedUserIds },
+              { merge: true },
+            );
           }
+
         } catch {
           if (currentUserRef) {
             await setDoc(currentUserRef, { likedUsers: nextLikedUserIds }, { merge: true });
@@ -1962,9 +2662,11 @@ export default function App() {
     }
 
     setLikedDaters((current) =>
-      current.some((dater) => dater.id === currentDater.id)
-        ? current
-        : [...current, currentDater],
+      matchedOnThisLike
+        ? current.filter((dater) => dater.id !== currentDater.id)
+        : current.some((dater) => dater.id === currentDater.id)
+          ? current
+          : [...current, currentDater],
     );
     setSwipeIndex((current) => current + 1);
   };
@@ -2332,6 +3034,19 @@ export default function App() {
                 </select>
               </label>
               <div>
+                <label style={{ display: 'block', textAlign: 'left' }}>Bio</label>
+                <textarea
+                  className="bio-textarea"
+                  value={profileForm.bio}
+                  onChange={(event) =>
+                    setProfileForm((current) => ({ ...current, bio: event.target.value }))
+                  }
+                  placeholder="Tell people about yourself"
+                  rows={5}
+                  maxLength={220}
+                />
+              </div>
+              <div>
                 <label>Describe yourself (Pick up to 3)</label>
                 <div className="hobbies-scroll-list">
                   {vibeWordOptions.map((word) => (
@@ -2549,7 +3264,7 @@ export default function App() {
         <img src={youreAllSetImg} alt="You're All Set!" />
         <img src={gatorImg} className="gator-set" alt="Gator" />
         <div style={{ height: '15cqh' }} />
-        <button className="primary-button" type="button" onClick={handleContinueFromAllSet}>
+        <button className="primary-button all-set-continue" type="button" onClick={handleContinueFromAllSet}>
           Continue
         </button>
       </div>,
@@ -2581,6 +3296,7 @@ export default function App() {
               <div className="likes-list">
                 {likedDaters.map((dater) => (
                   <article key={dater.id} className="liked-card">
+                    <img className="liked-card-image" src={dater.image || gatorImg} alt={dater.name} />
                     <p className="account-label">{dater.compatibility}% match</p>
                     <h3>
                       {dater.name}, {dater.age}
@@ -2612,6 +3328,7 @@ export default function App() {
               <div className="likes-list">
                 {matchedDaters.map((dater) => (
                   <article key={dater.id} className="liked-card">
+                    <img className="liked-card-image" src={dater.image || gatorImg} alt={dater.name} />
                     <p className="account-label">{dater.compatibility}% match</p>
                     <h3>
                       {dater.name}, {dater.age}
