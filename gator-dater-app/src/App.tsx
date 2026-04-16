@@ -10,6 +10,7 @@ import {
   User,
 } from 'firebase/auth';
 import {
+  addDoc,
   collection,
   deleteField,
   doc,
@@ -37,6 +38,12 @@ import likeIcon from '../assets/likeIcon.png';
 import dislikeIcon from '../assets/dislikeIcon.png';
 import searchIcon from '../assets/searchIcon.png';
 import submitIcon from '../assets/submitIcon.png';
+import {
+  generatePlannerReply,
+  isGeminiConfigured,
+  type PlannerChatMessage,
+  type PlannerDateOption,
+} from './gemini';
 import './index.css';
 //calendar stuff
 import 'react-calendar/dist/Calendar.css';
@@ -76,6 +83,44 @@ type Dater = {
   compatibility: number;
   vibe: string;
   image: string;
+  interests: string[];
+  dateBudget: string;
+  dateVibe: string[];
+  availability: string[];
+  photoUrl: string;
+};
+
+type ChatConversation = {
+  chatId: string;
+  matchId: string;
+  matchName: string;
+  matchPhotoUrl: string;
+  preview: string;
+  unread: boolean;
+};
+
+type ChatMessage = {
+  id: string;
+  senderId: string;
+  senderName: string;
+  text: string;
+  sentAt: number;
+  status?: 'pending' | 'sent' | 'failed';
+};
+
+type PlannerPrompt = {
+  id: string;
+  label: string;
+  prompt: string;
+};
+
+type CalendarPlan = {
+  id: string;
+  title: string;
+  place: string;
+  description: string;
+  matchName: string;
+  date: string;
 };
 
 type SignUpState = {
@@ -160,15 +205,6 @@ type UserProfile = {
   conversations?: Record<string, string>;
   onboardingCompleted: boolean;
   createdAt?: unknown;
-};
-
-type ChatMessage = {
-  id: string;
-  senderId: string;
-  senderName: string;
-  text: string;
-  sentAt: number;
-  status?: 'pending' | 'sent' | 'failed';
 };
 
 const initialSignUp: SignUpState = {
@@ -571,6 +607,11 @@ const profileToDater = (profileEntry: UserProfile): Dater => {
     compatibility: 0,
     vibe: topVibe,
     image: getProfilePhotoUrl(profileEntry),
+    interests: profileEntry.interests,
+    dateBudget: profileEntry.dateBudget,
+    dateVibe: profileEntry.dateVibe,
+    availability: profileEntry.availability,
+    photoUrl: profileEntry.photoUrl || '',
   };
 };
 const normalizePreferences = (preferences: Partial<Preferences> | undefined): Preferences => ({
@@ -779,6 +820,117 @@ const formatChatTime = (timestamp: number) => {
   });
 };
 
+const plannerGreeting =
+  'Tell me the kind of date you want, and I will suggest a few Gainesville-friendly ideas.';
+
+const buildPlannerPrompts = (profile: UserProfile | null, selectedMatch: Dater | null): PlannerPrompt[] => {
+  const interestPair = profile?.interests?.slice(0, 2).join(' and ');
+  const matchName = selectedMatch?.name?.split(' ')[0] || 'my match';
+  const sharedInterestSummary =
+    profile?.interests
+      ?.filter((interest) => selectedMatch?.interests.includes(interest))
+      .slice(0, 2)
+      .join(' and ') || '';
+
+  return [
+    {
+      id: 'coffee',
+      label: 'Low-key first date',
+      prompt: `Plan a casual first date near campus with ${matchName}, including coffee or dessert and a simple conversation-friendly activity.`,
+    },
+    {
+      id: 'budget',
+      label: 'Budget-friendly night',
+      prompt: `Give me 3 affordable Gainesville date ideas for ${matchName} this week that feel thoughtful, not boring.`,
+    },
+    {
+      id: 'outdoors',
+      label: 'Outside plan',
+      prompt: `Suggest an outdoor date in Gainesville for ${matchName}, with a backup option in case it rains.`,
+    },
+    {
+      id: 'personalized',
+      label: 'Match my vibe',
+      prompt: sharedInterestSummary
+        ? `Plan a Gainesville date for me and ${matchName} built around our shared interest in ${sharedInterestSummary}, with a realistic student budget and an easy first message to send.`
+        : interestPair
+          ? `Plan a Gainesville date that fits me and ${matchName}, especially if we would enjoy ${interestPair}, with a realistic student budget and an easy first message to send.`
+          : `Plan a Gainesville date idea for me and ${matchName} that feels fun, safe, and easy for two UF students to say yes to.`,
+    },
+  ];
+};
+
+const buildPlannerGreeting = (selectedMatch: Dater | null) =>
+  selectedMatch
+    ? `Tell me what kind of date you want with ${selectedMatch.name}, and I will suggest Gainesville-friendly ideas based on both of your preferences.`
+    : plannerGreeting;
+
+const describeMatchForPlanner = (selectedMatch: Dater | null) => {
+  if (!selectedMatch) {
+    return 'No specific match selected yet. Give broad Gainesville date ideas until the user picks a match.';
+  }
+
+  return [
+    `Selected match: ${selectedMatch.name}`,
+    `Year at UF: ${selectedMatch.yearAtUf}`,
+    `Bio: ${selectedMatch.bio}`,
+    `Top vibe: ${selectedMatch.vibe}`,
+    selectedMatch.interests.length ? `Interests: ${selectedMatch.interests.join(', ')}` : '',
+    selectedMatch.dateVibe.length ? `Preferred date vibes: ${selectedMatch.dateVibe.join(', ')}` : '',
+    selectedMatch.availability.length ? `Availability: ${selectedMatch.availability.join(', ')}` : '',
+    selectedMatch.dateBudget ? `Budget comfort: ${selectedMatch.dateBudget}` : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
+};
+
+const buildPlannerRequest = (
+  userPrompt: string,
+  currentProfile: UserProfile | null,
+  selectedMatch: Dater | null,
+) => {
+  const sharedInterests = currentProfile?.interests.filter((interest) =>
+    selectedMatch?.interests.includes(interest),
+  ) || [];
+  const sharedVibes = currentProfile?.dateVibe.filter((vibe) =>
+    selectedMatch?.dateVibe.includes(vibe),
+  ) || [];
+
+  return [
+    'Plan this date using the match details below.',
+    describeMatchForPlanner(selectedMatch),
+    currentProfile
+      ? `Current user preferences:\n${[
+          currentProfile.interests.length ? `Interests: ${currentProfile.interests.join(', ')}` : '',
+          currentProfile.dateVibe.length ? `Preferred date vibes: ${currentProfile.dateVibe.join(', ')}` : '',
+          currentProfile.availability.length ? `Availability: ${currentProfile.availability.join(', ')}` : '',
+          currentProfile.dateBudget ? `Budget comfort: ${currentProfile.dateBudget}` : '',
+        ]
+          .filter(Boolean)
+          .join('\n')}`
+      : '',
+    sharedInterests.length ? `Shared interests: ${sharedInterests.join(', ')}` : 'Shared interests: not obvious yet',
+    sharedVibes.length ? `Shared date vibes: ${sharedVibes.join(', ')}` : 'Shared date vibes: not obvious yet',
+    selectedMatch
+      ? `Please make the plan feel specifically compatible with ${selectedMatch.name}, and mention why the suggestion fits both people.`
+      : 'Please keep the suggestions broad until a match is selected.',
+    `User request: ${userPrompt}`,
+  ]
+    .filter(Boolean)
+    .join('\n\n');
+};
+
+const formatCalendarDateValue = (date: Date) => date.toISOString().split('T')[0];
+const isSingleCalendarDate = (value: Date | null | [Date | null, Date | null]): value is Date =>
+  value instanceof Date;
+const isSameCalendarDay = (left: string, right: string) => left === right;
+const formatCalendarEntryLabel = (date: string) =>
+  new Date(`${date}T12:00:00`).toLocaleDateString([], {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+  });
+
 export default function App() {
   const [screen, setScreen] = useState<Screen>('intro');
   const [signUp, setSignUp] = useState<SignUpState>(initialSignUp);
@@ -805,6 +957,20 @@ export default function App() {
   const [discoveryFeed, setDiscoveryFeed] = useState<Dater[]>([]);
   const [discoveryFeedSource, setDiscoveryFeedSource] = useState<'sample' | 'firestore'>('sample');
   const [preferencesSection, setPreferencesSection] = useState<'preferences' | 'deal-breakers'>('preferences');
+  const [plannerMessages, setPlannerMessages] = useState<PlannerChatMessage[]>([
+    { role: 'assistant', text: plannerGreeting },
+  ]);
+  const [plannerInput, setPlannerInput] = useState('');
+  const [plannerLoading, setPlannerLoading] = useState(false);
+  const [plannerError, setPlannerError] = useState('');
+  const [selectedPlannerMatchId, setSelectedPlannerMatchId] = useState('');
+  const [calendarPlans, setCalendarPlans] = useState<CalendarPlan[]>([]);
+  const [pendingCalendarSave, setPendingCalendarSave] = useState<{
+    messageIndex: number;
+    optionIndex: number;
+    date: string;
+  } | null>(null);
+  const plannerChatRef = useRef<HTMLDivElement | null>(null);
   const profilePhotoInputRef = useRef<HTMLInputElement | null>(null);
   //hehe calendar
   type ValuePiece = Date | null;
@@ -852,6 +1018,28 @@ export default function App() {
         }
 
         setProfile(nextProfile);
+        setProfileForm((current) => ({
+          ...current,
+          firstName: nextProfile.firstName || current.firstName,
+          lastName: nextProfile.lastName || current.lastName,
+          age: String(nextProfile.age || current.age),
+          yearAtUf: nextProfile.yearAtUf || current.yearAtUf,
+          bio: nextProfile.bio || current.bio,
+          photoUrl: nextProfile.photoUrl || user.photoURL || current.photoUrl,
+          intention: nextProfile.preferences.intention || current.intention,
+          genderIdentity: nextProfile.preferences.genderIdentity || current.genderIdentity,
+          genderPreference: nextProfile.preferences.genderPreference || current.genderPreference,
+          intentionOpenTo: nextProfile.preferences.intentionOpenTo || current.intentionOpenTo,
+          ageRangeMin: String(nextProfile.preferences.ageRange.min || current.ageRangeMin),
+          ageRangeMax: String(nextProfile.preferences.ageRange.max || current.ageRangeMax),
+          vibeWords: nextProfile.preferences.vibeWords || current.vibeWords,
+          socialEnergy: nextProfile.preferences.socialEnergy ?? current.socialEnergy,
+          dateBudget: nextProfile.preferences.dateBudget || current.dateBudget,
+          dateVibe: nextProfile.preferences.dateVibe || current.dateVibe,
+          distance: nextProfile.preferences.distance || current.distance,
+          availability: nextProfile.preferences.availability || current.availability,
+          interests: nextProfile.preferences.interests || current.interests,
+        }));
         setScreen(nextProfile.onboardingCompleted ? 'home' : 'profile');
       } catch (loadError) {
         setProfile(null);
@@ -964,6 +1152,25 @@ export default function App() {
   }, [matchedDaters]);
 
   useEffect(() => {
+    if (!matchedDaters.length) {
+      setSelectedPlannerMatchId('');
+      return;
+    }
+
+    setSelectedPlannerMatchId((currentSelected) => {
+      if (currentSelected && matchedDaters.some((dater) => dater.id === currentSelected)) {
+        return currentSelected;
+      }
+
+      if (selectedMatchId && matchedDaters.some((dater) => dater.id === selectedMatchId)) {
+        return selectedMatchId;
+      }
+
+      return matchedDaters[0]?.id || '';
+    });
+  }, [matchedDaters, selectedMatchId]);
+
+  useEffect(() => {
     if (!db || !currentUser || !selectedMatchId) {
       setChatMessages([]);
       setConversationReadBy({});
@@ -1059,9 +1266,122 @@ export default function App() {
     };
   }, [currentUser, selectedMatchId]);
 
+  useEffect(() => {
+    if (!plannerChatRef.current) {
+      return;
+    }
+
+    plannerChatRef.current.scrollTop = plannerChatRef.current.scrollHeight;
+  }, [plannerMessages, plannerLoading]);
+
+  useEffect(() => {
+    const selectedPlannerMatch =
+      matchedDaters.find((dater) => dater.id === selectedPlannerMatchId) || null;
+
+    setPlannerMessages([{ role: 'assistant', text: buildPlannerGreeting(selectedPlannerMatch) }]);
+    setPlannerInput('');
+    setPlannerError('');
+    setPendingCalendarSave(null);
+  }, [matchedDaters, selectedPlannerMatchId]);
+
   const resetMessages = () => {
     setError('');
     setStatus('');
+  };
+
+  const submitPlannerPrompt = async (messageText: string) => {
+    const trimmedMessage = messageText.trim();
+    const selectedPlannerMatch =
+      matchedDaters.find((dater) => dater.id === selectedPlannerMatchId) || null;
+
+    if (!trimmedMessage) {
+      return;
+    }
+
+    if (!isGeminiConfigured) {
+      setPlannerError('Add VITE_GEMINI_API_KEY to gator-dater-app/.env to enable the chatbot.');
+      return;
+    }
+
+    const nextMessages: PlannerChatMessage[] = [
+      ...plannerMessages,
+      { role: 'user', text: trimmedMessage },
+    ];
+
+    setPlannerInput('');
+    setPlannerError('');
+    setPlannerLoading(true);
+    setPlannerMessages(nextMessages);
+
+    try {
+      const plannerMessagesWithContext: PlannerChatMessage[] = [
+        ...plannerMessages,
+        {
+          role: 'user',
+          text: buildPlannerRequest(trimmedMessage, profile, selectedPlannerMatch),
+        },
+      ];
+      const reply = await generatePlannerReply(plannerMessagesWithContext, profile || undefined);
+
+      setPlannerMessages([
+        ...nextMessages,
+        { role: 'assistant', text: reply.intro, dateOptions: reply.dateOptions },
+      ]);
+    } catch (plannerReplyError) {
+      setPlannerError(
+        plannerReplyError instanceof Error
+          ? plannerReplyError.message
+          : 'The planner could not respond right now.',
+      );
+    } finally {
+      setPlannerLoading(false);
+    }
+  };
+
+  const handlePlannerPromptClick = async (prompt: string) => {
+    await submitPlannerPrompt(prompt);
+  };
+
+  const handlePlannerSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    await submitPlannerPrompt(plannerInput);
+  };
+
+  const handleStartCalendarSave = (messageIndex: number, optionIndex: number) => {
+    const selectedDate = isSingleCalendarDate(calendarValue) ? calendarValue : new Date();
+
+    setPendingCalendarSave({
+      messageIndex,
+      optionIndex,
+      date: formatCalendarDateValue(selectedDate),
+    });
+  };
+
+  const handleConfirmCalendarSave = (
+    option: PlannerDateOption,
+    matchName: string,
+  ) => {
+    if (!pendingCalendarSave?.date) {
+      return;
+    }
+
+    const nextPlan: CalendarPlan = {
+      id: `${option.title}-${pendingCalendarSave.date}`,
+      title: option.title,
+      place: option.place,
+      description: option.description,
+      matchName,
+      date: pendingCalendarSave.date,
+    };
+
+    setCalendarPlans((current) => {
+      const withoutDuplicate = current.filter((plan) => plan.id !== nextPlan.id);
+      return [...withoutDuplicate, nextPlan].sort((left, right) => left.date.localeCompare(right.date));
+    });
+    setCalendarValue(new Date(`${pendingCalendarSave.date}T12:00:00`));
+    setPendingCalendarSave(null);
+    setActiveTab('calendar');
+    setStatus(`Added "${option.title}" to your calendar.`);
   };
 
   const getLocalProfile = (uid: string) => {
@@ -1086,6 +1406,49 @@ export default function App() {
       JSON.stringify(nextProfile),
     );
   };
+
+  const readPhotoFile = (file: File) =>
+    new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+
+      reader.onload = () => {
+        const result = reader.result;
+
+        if (typeof result !== 'string') {
+          reject(new Error('Unable to read the selected photo.'));
+          return;
+        }
+
+        const image = new Image();
+
+        image.onload = () => {
+          const maxDimension = 512;
+          const scale = Math.min(1, maxDimension / Math.max(image.width, image.height));
+          const width = Math.max(1, Math.round(image.width * scale));
+          const height = Math.max(1, Math.round(image.height * scale));
+          const canvas = document.createElement('canvas');
+          const context = canvas.getContext('2d');
+
+          if (!context) {
+            resolve(result);
+            return;
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          context.drawImage(image, 0, 0, width, height);
+
+          const compressedResult = canvas.toDataURL('image/jpeg', 0.82);
+          resolve(compressedResult.length < result.length ? compressedResult : result);
+        };
+
+        image.onerror = () => resolve(result);
+        image.src = result;
+      };
+
+      reader.onerror = () => reject(new Error('Unable to read the selected photo.'));
+      reader.readAsDataURL(file);
+    });
 
   const saveProfilePhoto = async (photoUrl: string) => {
     if (!currentUser || !currentUser.email) {
@@ -1164,7 +1527,11 @@ export default function App() {
 
       await updateProfile(currentUser, {
         displayName: updatedProfile.fullName,
+        photoURL: photoUrl,
       });
+
+      await reload(currentUser);
+      setCurrentUser(auth?.currentUser || currentUser);
 
       setStatus('Profile photo updated.');
     } catch (photoError) {
@@ -1182,31 +1549,29 @@ export default function App() {
     }
   };
 
-  const handlePhotoChange = (event: ChangeEvent<HTMLInputElement>) => {
+  const handlePhotoChange = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
 
     if (!file) {
       return;
     }
+    event.target.value = '';
 
-    const reader = new FileReader();
-
-    reader.onload = () => {
-      const result = reader.result;
-
-      if (typeof result !== 'string') {
-        return;
-      }
+    try {
+      const result = await readPhotoFile(file);
 
       setProfileForm((current) => ({
         ...current,
         photoUrl: result,
       }));
       setStatus('Photo selected.');
-    };
-
-    reader.readAsDataURL(file);
-    event.target.value = '';
+    } catch (photoError) {
+      setError(
+        photoError instanceof Error
+          ? photoError.message
+          : 'Unable to process the selected photo.',
+      );
+    }
   };
 
   const handleProfilePhotoUpdate = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -1215,20 +1580,18 @@ export default function App() {
     if (!file || !currentUser || !currentUser.email) {
       return;
     }
-    const reader = new FileReader();
-
-    reader.onload = async () => {
-      const result = reader.result;
-
-      if (typeof result !== 'string') {
-        return;
-      }
-
-      await saveProfilePhoto(result);
-    };
-
-    reader.readAsDataURL(file);
     event.target.value = '';
+
+    try {
+      const result = await readPhotoFile(file);
+      await saveProfilePhoto(result);
+    } catch (photoError) {
+      setError(
+        photoError instanceof Error
+          ? photoError.message
+          : 'Unable to process the selected photo.',
+      );
+    }
   };
 
   const loadUserProfile = async (user: User) => {
@@ -1267,6 +1630,9 @@ export default function App() {
       throw loadError;
     }
   };
+
+  const activeProfilePhoto =
+    profileForm.photoUrl || profile?.photoUrl || currentUser?.photoURL || '';
 
   const handleBack = () => {
     resetMessages();
@@ -1724,7 +2090,7 @@ export default function App() {
       distance: nextPreferences.distance,
       availability: nextPreferences.availability,
       email: currentUser.email,
-      photoUrl: profile?.photoUrl || profileForm.photoUrl || '',
+      photoUrl: profileForm.photoUrl || profile?.photoUrl || '',
       preferences: nextPreferences,
       likedUsers: profile?.likedUsers || [],
       passedUsers: profile?.passedUsers || [],
@@ -2262,6 +2628,13 @@ export default function App() {
 
   const renderTabContent = () => {
     if (activeTab === 'calendar') {
+      const selectedCalendarDate = isSingleCalendarDate(calendarValue)
+        ? formatCalendarDateValue(calendarValue)
+        : formatCalendarDateValue(new Date());
+      const plansForSelectedDay = calendarPlans.filter((plan) =>
+        isSameCalendarDay(plan.date, selectedCalendarDate),
+      );
+
       return (
         <>
           <section className="calendar">
@@ -2274,50 +2647,186 @@ export default function App() {
           </section>
 
           <section className="home-grid">
-            <article className="home-tile">
-              <h3>Pascal's Coffeehouse - Friday</h3>
-              <p>7:00 PM with Maya. Saved as a casual first date near campus.</p>
-            </article>
+            {plansForSelectedDay.length ? (
+              plansForSelectedDay.map((plan) => (
+                <article key={plan.id} className="home-tile">
+                  <h3>{plan.title}</h3>
+                  <p>{plan.place}</p>
+                  <p>With {plan.matchName} on {formatCalendarEntryLabel(plan.date)}</p>
+                  <p>{plan.description}</p>
+                </article>
+              ))
+            ) : (
+              <article className="home-tile">
+                <h3>No saved dates for this day</h3>
+                <p>Use the planner tab to generate 3 ideas, then add one to your calendar.</p>
+              </article>
+            )}
           </section>
         </>
       );
     }
 
     if (activeTab === 'planner') {
+      const selectedPlannerMatch =
+        matchedDaters.find((dater) => dater.id === selectedPlannerMatchId) || null;
+      const plannerPrompts = buildPlannerPrompts(profile, selectedPlannerMatch);
+      const hasPlannerSessionStarted = plannerMessages.some((message) => message.role === 'user');
+
       return (
         <>
-          <p className="account-detail">Describe the kind of date you want and get Gainesville-friendly suggestions.</p>
+          <p className="account-detail">
+            Pick a match, then describe the kind of date you want and get Gainesville-friendly suggestions tailored to both of you.
+          </p>
+          {!isGeminiConfigured ? (
+            <p className="planner-helper-text">
+              Add <code>VITE_GEMINI_API_KEY</code> to <code>gator-dater-app/.env</code> to enable the chatbot.
+            </p>
+          ) : null}
+          {!matchedDaters.length ? (
+            <p className="planner-helper-text">
+              Match with someone first, then the planner can suggest dates around that person&apos;s vibe and preferences.
+            </p>
+          ) : (
+            <section className="home-tile">
+              <label className="account-label" htmlFor="planner-match-select">
+                Plan for a specific match
+              </label>
+              <select
+                id="planner-match-select"
+                className="preferences-select"
+                value={selectedPlannerMatchId}
+                onChange={(event) => setSelectedPlannerMatchId(event.target.value)}
+                disabled={plannerLoading}
+              >
+                {matchedDaters.map((dater) => (
+                  <option key={dater.id} value={dater.id}>
+                    {dater.name} · {dater.vibe}
+                  </option>
+                ))}
+              </select>
+              {selectedPlannerMatch ? (
+                <p className="planner-helper-text">
+                  Planning for {selectedPlannerMatch.name}: {selectedPlannerMatch.bio}
+                </p>
+              ) : null}
+            </section>
+          )}
 
-          <section className="prompt-grid">
-            <button className="prompt-button">
-              <p>Local coffee shops</p>
-              <img src={searchImg} alt="Search" className="Search" />
-            </button>
-            <button className="prompt-button">
-              <p>Date ideas for [insert person here]</p>
-              <img src={searchImg} alt="Search" className="Search" />
-            </button>
-            <button className="prompt-button">
-              <p>Best days for picnic near me</p>
-              <img src={searchImg} alt="Search" className="Search" />
-            </button>
-          </section>
+          {!hasPlannerSessionStarted ? (
+            <section className="prompt-grid">
+              {plannerPrompts.map((prompt) => (
+                <button
+                  key={prompt.id}
+                  className="prompt-button"
+                  type="button"
+                  onClick={() => void handlePlannerPromptClick(prompt.prompt)}
+                  disabled={plannerLoading || !matchedDaters.length}
+                >
+                  <p>{prompt.label}</p>
+                  <img src={searchImg} alt="Search" className="Search" />
+                </button>
+              ))}
+            </section>
+          ) : null}
 
           <section className="chat">
-            <div className="chat-section">
-              <div className="message-from-other">
-                <p>Hello! How can I help you find the perfect date idea?</p>
-              </div>
-              <div className="message-from-user">
-                <p>I'm looking for a fun and casual date idea near campus for this weekend.</p>
-              </div>
+            <div className="chat-section planner-chat-section" ref={plannerChatRef}>
+              {plannerMessages.map((message, index) => (
+                <div
+                  key={`${message.role}-${index}`}
+                  className={
+                    message.role === 'assistant'
+                      ? `message-from-other${message.dateOptions?.length ? ' planner-response-message' : ''}`
+                      : 'message-from-user'
+                  }
+                >
+                  <p>{message.text}</p>
+                  {message.role === 'assistant' && message.dateOptions?.length ? (
+                    <div className="planner-option-list">
+                      {message.dateOptions.map((option, optionIndex) => {
+                        const isSavingThisOption =
+                          pendingCalendarSave?.messageIndex === index &&
+                          pendingCalendarSave?.optionIndex === optionIndex;
+
+                        return (
+                          <article key={`${option.title}-${optionIndex}`} className="home-tile planner-date-block">
+                            <h3>{option.title}</h3>
+                            <p>{option.place}</p>
+                            <p>{option.description}</p>
+                            <p>{option.whyItFits}</p>
+                            <button
+                              className="secondary-button"
+                              type="button"
+                              onClick={() => handleStartCalendarSave(index, optionIndex)}
+                            >
+                              Add to calendar
+                            </button>
+                            {isSavingThisOption ? (
+                              <div className="planner-calendar-save">
+                                <label htmlFor={`planner-date-${index}-${optionIndex}`}>
+                                  Pick a date
+                                </label>
+                                <input
+                                  id={`planner-date-${index}-${optionIndex}`}
+                                  type="date"
+                                  value={pendingCalendarSave.date}
+                                  onChange={(event) =>
+                                    setPendingCalendarSave((current) =>
+                                      current
+                                        ? {
+                                            ...current,
+                                            date: event.target.value,
+                                          }
+                                        : current,
+                                    )
+                                  }
+                                />
+                                <button
+                                  className="primary-button"
+                                  type="button"
+                                  onClick={() =>
+                                    handleConfirmCalendarSave(
+                                      option,
+                                      selectedPlannerMatch?.name || 'your match',
+                                    )
+                                  }
+                                  disabled={!pendingCalendarSave.date}
+                                >
+                                  Save date
+                                </button>
+                              </div>
+                            ) : null}
+                          </article>
+                        );
+                      })}
+                    </div>
+                  ) : null}
+                </div>
+              ))}
+              {plannerLoading ? (
+                <div className="message-from-other planner-typing">
+                  <p>Thinking through a few ideas...</p>
+                </div>
+              ) : null}
             </div>
-            <div className="chat-input">
-              <input type="text" placeholder="Ask for date ideas..." />
-              <button className="submit-button" type="button">
+            {plannerError ? <p className="planner-error-text">{plannerError}</p> : null}
+            <form className="chat-input" onSubmit={handlePlannerSubmit}>
+              <input
+                type="text"
+                placeholder={matchedDaters.length ? 'Ask for date ideas for this match...' : 'Match with someone to unlock the planner...'}
+                value={plannerInput}
+                onChange={(event) => setPlannerInput(event.target.value)}
+                disabled={!isGeminiConfigured || plannerLoading || !matchedDaters.length}
+              />
+              <button
+                className="submit-button"
+                type="submit"
+                disabled={!isGeminiConfigured || plannerLoading || !plannerInput.trim() || !matchedDaters.length}
+              >
                 <img src={submitImg} alt="Send" className="send-icon" />
               </button>
-            </div>
+            </form>
           </section>
         </>
       );
@@ -2347,7 +2856,15 @@ export default function App() {
                   role="button"
                   tabIndex={0}
                 >
-                  <div className="profile-circle-mini" style={{ backgroundImage: `url(${dater.image || gatorImg})` }} />
+                  {dater.photoUrl ? (
+                    <img
+                      src={dater.photoUrl}
+                      alt={`${dater.name} profile`}
+                      className="profile-circle-mini profile-circle-mini-image"
+                    />
+                  ) : (
+                    <div className="profile-circle-mini" style={{ backgroundImage: `url(${dater.image || gatorImg})` }} />
+                  )}
                   <div className="chat-text-meta">
                     <h3 className="chat-name">{dater.name}</h3>
                     <p className="chat-preview">Open conversation</p>
@@ -2434,13 +2951,21 @@ export default function App() {
       return (
         <>
           <section className="intro-profile-panel">
-            {profile?.photoUrl || currentUser?.photoURL ? (
+            {activeProfilePhoto ? (
               <div className="profile-photo-wrap">
                 <img
-                  src={profile?.photoUrl || currentUser?.photoURL || ''}
+                  src={activeProfilePhoto}
                   alt={`${profile?.fullName || currentUser?.displayName || 'User'} profile`}
                   className="profile-photo"
                 />
+                <button
+                  className="profile-photo-edit-button"
+                  type="button"
+                  onClick={() => profilePhotoInputRef.current?.click()}
+                  aria-label="Edit profile photo"
+                >
+                  <img src={writeImg} alt="" className="profile-photo-edit-icon" />
+                </button>
               </div>
             ) : null}
             <h1>{profile?.fullName || currentUser?.displayName || currentUser?.email}</h1>
@@ -2452,13 +2977,6 @@ export default function App() {
               className="hidden-input"
               onChange={handleProfilePhotoUpdate}
             />
-            <button
-              className="secondary-button tile-button"
-              type="button"
-              onClick={() => profilePhotoInputRef.current?.click()}
-            >
-              Edit Profile Photo
-            </button>
           </section>
           <section className="home-grid">
             <article className="profile-tile">
@@ -2517,6 +3035,15 @@ export default function App() {
           {currentDater ? (
             <article className="swipe-card">
               <img className="swipe-card-image" src={currentDater.image || gatorImg} alt={currentDater.name} />
+              {currentDater.photoUrl ? (
+                <div className="swipe-photo-wrap">
+                  <img
+                    src={currentDater.photoUrl}
+                    alt={`${currentDater.name} profile`}
+                    className="swipe-photo"
+                  />
+                </div>
+              ) : null}
               <p>{currentDater.compatibility}% match</p>
               <h2>
                 {currentDater.name}, {currentDater.age}
@@ -3297,6 +3824,15 @@ export default function App() {
                 {likedDaters.map((dater) => (
                   <article key={dater.id} className="liked-card">
                     <img className="liked-card-image" src={dater.image || gatorImg} alt={dater.name} />
+                    {dater.photoUrl ? (
+                      <div className="profile-photo-wrap">
+                        <img
+                          src={dater.photoUrl}
+                          alt={`${dater.name} profile`}
+                          className="profile-photo liked-profile-photo"
+                        />
+                      </div>
+                    ) : null}
                     <p className="account-label">{dater.compatibility}% match</p>
                     <h3>
                       {dater.name}, {dater.age}
@@ -3329,6 +3865,15 @@ export default function App() {
                 {matchedDaters.map((dater) => (
                   <article key={dater.id} className="liked-card">
                     <img className="liked-card-image" src={dater.image || gatorImg} alt={dater.name} />
+                    {dater.photoUrl ? (
+                      <div className="profile-photo-wrap">
+                        <img
+                          src={dater.photoUrl}
+                          alt={`${dater.name} profile`}
+                          className="profile-photo liked-profile-photo"
+                        />
+                      </div>
+                    ) : null}
                     <p className="account-label">{dater.compatibility}% match</p>
                     <h3>
                       {dater.name}, {dater.age}
@@ -3354,24 +3899,22 @@ export default function App() {
         <div className={`active-indicator pos-${activeTab}`} />
 
         <div className="icons-wrapper">
-          <div className="icons-wrapper-extra">
-            <button
-              className={activeTab === 'calendar' ? 'tab-button active' : 'tab-button'}
-              onClick={() => setActiveTab('calendar')}
-            >
-              <span className="tab-icon">
-                <img src={calenderImg} alt="Calendar" />
-              </span>
-            </button>
-            <button
-              className={activeTab === 'planner' ? 'tab-button active' : 'tab-button'}
-              onClick={() => setActiveTab('planner')}
-            >
-              <span className="tab-icon">
-                <img src={writeImg} alt="Write" />
-              </span>
-            </button>
-          </div>
+          <button
+            className={activeTab === 'calendar' ? 'tab-button active' : 'tab-button'}
+            onClick={() => setActiveTab('calendar')}
+          >
+            <span className="tab-icon">
+              <img src={calenderImg} alt="Calendar" />
+            </span>
+          </button>
+          <button
+            className={activeTab === 'planner' ? 'tab-button active' : 'tab-button'}
+            onClick={() => setActiveTab('planner')}
+          >
+            <span className="tab-icon">
+              <img src={writeImg} alt="Write" />
+            </span>
+          </button>
           <button
             className={activeTab === 'swipe' ? 'tab-button active' : 'tab-button'}
             onClick={() => setActiveTab('swipe')}
@@ -3380,24 +3923,22 @@ export default function App() {
               <img src={heartNavImg} alt="Like" />
             </span>
           </button>
-          <div className="icons-wrapper-extra">
-            <button
-              className={activeTab === 'chats' ? 'tab-button active' : 'tab-button'}
-              onClick={() => setActiveTab('chats')}
-            >
-              <span className="tab-icon">
-                <img src={chatImg} alt="Chats" />
-              </span>
-            </button>
-            <button
-              className={activeTab === 'profile-tab' ? 'tab-button active' : 'tab-button'}
-              onClick={() => setActiveTab('profile-tab')}
-            >
-              <span className="tab-icon">
-                <img src={userImg} alt="Profile" />
-              </span>
-            </button>
-          </div>
+          <button
+            className={activeTab === 'chats' ? 'tab-button active' : 'tab-button'}
+            onClick={() => setActiveTab('chats')}
+          >
+            <span className="tab-icon">
+              <img src={chatImg} alt="Chats" />
+            </span>
+          </button>
+          <button
+            className={activeTab === 'profile-tab' ? 'tab-button active' : 'tab-button'}
+            onClick={() => setActiveTab('profile-tab')}
+          >
+            <span className="tab-icon">
+              <img src={userImg} alt="Profile" />
+            </span>
+          </button>
         </div>
       </nav>
 
