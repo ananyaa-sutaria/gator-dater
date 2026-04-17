@@ -254,6 +254,51 @@ p, label, input {
   padding: 8px;
 }
 
+.react-calendar__tile {
+  position: relative;
+  padding-bottom: 16px;
+}
+
+.react-calendar__tile--now {
+  background: color-mix(in srgb, var(--color-lightPink) 22%, white);
+  border-radius: 10px;
+}
+
+.react-calendar__tile--now:enabled:hover,
+.react-calendar__tile--now:enabled:focus {
+  background: color-mix(in srgb, var(--color-lightPink) 34%, white);
+}
+
+.react-calendar__tile.calendar-day-selected {
+  outline: 2px solid var(--color-darkPink);
+  outline-offset: -4px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--color-lightPink) 45%, white);
+}
+
+.react-calendar__tile.calendar-day-selected:enabled:hover,
+.react-calendar__tile.calendar-day-selected:enabled:focus {
+  background: color-mix(in srgb, var(--color-pink) 35%, white);
+}
+
+.react-calendar__tile.calendar-day-has-plan {
+  font-weight: inherit;
+}
+
+.calendar-plan-dot {
+  position: absolute;
+  display: block;
+  left: 50%;
+  bottom: 4px;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--color-darkPink);
+  transform: translateX(-50%);
+  pointer-events: none;
+  z-index: 1;
+}
+
 .react-calendar__month-view__days__day--weekend {
   color: #d10000;
 }
@@ -643,6 +688,29 @@ hr {
   border-radius: 16px;
   background: var(--color-lightGreen);
   width: 100%;
+}
+
+.calendar-plan-card {
+  display: flex !important;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-start;
+  gap: 0.6cqh;
+  height: auto;
+  min-height: 17cqw;
+  text-align: left;
+  background: var(--color-lightGreen) !important;
+  color: black !important;
+  border: 1px solid var(--color-green) !important;
+}
+
+.calendar-plan-card:hover {
+  background: #cff8ee !important;
+}
+
+.calendar-plan-card h3,
+.calendar-plan-card p {
+  margin: 0;
 }
 
 .chat-match-row {
@@ -1097,6 +1165,21 @@ input:focus {
   border-radius: 18px;
   padding: 1.5cqh;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+}
+
+.calendar-plan-modal {
+  display: grid;
+  gap: 1.5cqh;
+}
+
+.calendar-plan-modal-body {
+  display: grid;
+  gap: 1cqh;
+}
+
+.calendar-plan-modal-body p {
+  margin: 0;
+  color: black;
 }
 
 .likes-modal-header {
