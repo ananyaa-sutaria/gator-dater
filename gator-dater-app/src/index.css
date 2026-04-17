@@ -146,7 +146,15 @@ code {
   text-align: center;
   padding: 10cqw;
   gap: 2.93cqh;
-  overflow: hidden;
+  position: relative;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.info-screen.pref {
+  justify-content: flex-start;
+  align-items: stretch;
+  text-align: left;
 }
 
 .preferences-screen {
@@ -354,7 +362,6 @@ button:active {
 }
 
 .auth-form select {
-  height: 18.83cqw;
   width: min(313px, 100%);
   padding: 0 3.25cqw;
   border-radius: 2.54cqw;
@@ -364,7 +371,6 @@ button:active {
   
   text-align: left;
   display: block;
-  line-height: 18.83cqw;
 
   font-family: 'Zilla Slab', serif;
   font-size: 4.1cqw;
@@ -391,6 +397,11 @@ button:active {
 .auth-form .preferences-select {
   height: 12.7cqw;
   line-height: 12.7cqw;
+}
+
+.preferences-select {
+  font-family: 'Zilla Slab', serif;
+  width: 100%;
 }
 
 .auth-form .bio-textarea {
@@ -485,32 +496,32 @@ button:active {
   position: absolute;
   width: 175cqw;
   height: auto;
-  top: 18cqh;
+  top: 15cqh;
   left: 32cqw;
   object-fit: contain;
-  opacity: 0.5;
+  opacity: 0.6;
 }
 
 .gator-2 {
   position: absolute;
   width: 200cqw;
   height: auto;
-  top: 45cqh;
+  top: 42cqh;
   right: 32cqw;
   transform: scaleX(-1);
   transform-origin: center;
   object-fit: contain;
-  opacity: 0.5;
+  opacity: 0.6;
 }
 
 .gator-set {
   position: absolute;
   width: 220cqw;
   height: auto;
-  top: 37cqh;
+  top: 36cqh;
   left: 32cqw;
   object-fit: contain;
-  opacity: 0.5;
+  opacity: 0.8;
   pointer-events: none;
   z-index: 0;
 }
@@ -524,8 +535,8 @@ button:active {
   position: absolute;
   width: 15cqw;
   height: auto;
-  top: 50cqh;
-  left: 45cqw;
+  top: 46.5cqh;
+  left: 43cqw;
   z-index: 1;
 }
 
@@ -623,10 +634,15 @@ hr {
 
 .home-tile,
 .notice {
+  display: flex;
+  flex-direction: column;
+  gap: 1cqh;
+
   padding: 3cqw;
   border: 1px solid var(--color-green);
   border-radius: 16px;
   background: var(--color-lightGreen);
+  width: 100%;
 }
 
 .chat-match-row {
@@ -641,6 +657,7 @@ hr {
   outline: 1px solid var(--color-lightPink);
   background: white;
   min-width: 0;
+  cursor: pointer;
 }
 
 .chat-match-button {
@@ -723,6 +740,7 @@ hr {
 .home-tile h3, 
 .home-tile p {
   color: black !important;
+  line-height: 1;
 }
 
 .prompt-grid {
@@ -886,6 +904,7 @@ hr {
   margin-top: 0.4cqh;
   font-size: 3cqw;
   color: #6a5f66;
+  font-family: 'Zilla Slab', serif;
 }
 
 .chat-retry-button {
@@ -964,7 +983,8 @@ input:focus {
 .intro-profile-panel h1 {
   font-family: 'Yellowtail', cursive;
   font-size: 16cqw;
-  line-height: 0.7;
+  line-height: 1;
+  text-align: center;
 }
 
 .profile-tile {
