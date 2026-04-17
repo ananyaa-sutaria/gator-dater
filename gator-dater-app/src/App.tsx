@@ -118,6 +118,7 @@ type CalendarPlan = {
   title: string;
   place: string;
   description: string;
+  matchId: string;
   matchName: string;
   date: string;
 };
@@ -135,7 +136,7 @@ type SignInState = {
 type ProfileState = {
   firstName: string;
   lastName: string;
-  age: string;
+  birthDate: string;
   yearAtUf: string;
   bio: string;
   photoUrl: string;
@@ -179,6 +180,7 @@ type UserProfile = {
   fullName: string;
   name: string;
   age: number;
+  birthDate: string;
   yearAtUf: string;
   bio: string;
   gender: string;
@@ -219,7 +221,7 @@ const initialSignIn: SignInState = {
 const initialProfile: ProfileState = {
   firstName: '',
   lastName: '',
-  age: '',
+  birthDate: '',
   yearAtUf: '',
   bio: '',
   photoUrl: '',
@@ -519,6 +521,32 @@ const sampleDiscoveryProfiles: Array<Partial<UserProfile> & { uid: string }> = [
 
 const normalizeEmail = (email: string) => email.trim().toLowerCase();
 const isUflEmail = (email: string) => normalizeEmail(email).endsWith('@ufl.edu');
+const calculateAgeFromBirthDate = (birthDate: string) => {
+  if (!birthDate) {
+    return 18;
+  }
+
+  const birth = new Date(`${birthDate}T12:00:00`);
+
+  if (Number.isNaN(birth.getTime())) {
+    return 18;
+  }
+
+  const today = new Date();
+  let age = today.getFullYear() - birth.getFullYear();
+  const monthDifference = today.getMonth() - birth.getMonth();
+
+  if (monthDifference < 0 || (monthDifference === 0 && today.getDate() < birth.getDate())) {
+    age -= 1;
+  }
+
+  return age;
+};
+const getLatestAllowedBirthDate = () => {
+  const latest = new Date();
+  latest.setFullYear(latest.getFullYear() - 18);
+  return formatCalendarDateValue(latest);
+};
 const defaultPreferences: Preferences = {
   intention: 'either',
   genderIdentity: '',
@@ -638,7 +666,8 @@ const normalizeUserProfile = (rawProfile: Partial<UserProfile>, uid: string): Us
     lastName: rawProfile.lastName || '',
     fullName,
     name: rawProfile.name || fullName,
-    age: Number(rawProfile.age) || 18,
+    age: rawProfile.birthDate ? calculateAgeFromBirthDate(rawProfile.birthDate) : Number(rawProfile.age) || 18,
+    birthDate: rawProfile.birthDate || '',
     yearAtUf: rawProfile.yearAtUf || '',
     bio: rawProfile.bio || '',
     gender: rawProfile.gender || preferences.genderIdentity,
@@ -725,6 +754,7 @@ const buildFirestoreUserProfile = (nextProfile: UserProfile) => ({
   fullName: nextProfile.fullName,
   name: nextProfile.name,
   age: nextProfile.age,
+  birthDate: nextProfile.birthDate,
   yearAtUf: nextProfile.yearAtUf,
   bio: nextProfile.bio,
   email: nextProfile.email,
@@ -939,6 +969,42 @@ const formatCalendarEntryLabel = (date: string) =>
     month: 'long',
     day: 'numeric',
   });
+const normalizeComparableName = (value: string) => value.trim().toLowerCase();
+const normalizeCalendarPlan = (value: unknown): CalendarPlan | null => {
+  if (typeof value !== 'object' || value === null) {
+    return null;
+  }
+
+  const rawPlan = value as Record<string, unknown>;
+  const id = typeof rawPlan.id === 'string' ? rawPlan.id : '';
+  const title = typeof rawPlan.title === 'string' ? rawPlan.title : '';
+  const place = typeof rawPlan.place === 'string' ? rawPlan.place : '';
+  const description = typeof rawPlan.description === 'string' ? rawPlan.description : '';
+  const matchName = typeof rawPlan.matchName === 'string' ? rawPlan.matchName : '';
+  const matchId = typeof rawPlan.matchId === 'string' ? rawPlan.matchId : '';
+  const date = typeof rawPlan.date === 'string' ? rawPlan.date : '';
+
+  if (!id || !title || !date) {
+    return null;
+  }
+
+  return {
+    id,
+    title,
+    place,
+    description,
+    matchId,
+    matchName,
+    date,
+  };
+};
+const normalizeCalendarPlans = (value: unknown): CalendarPlan[] =>
+  Array.isArray(value)
+    ? value
+      .map((entry) => normalizeCalendarPlan(entry))
+      .filter((entry): entry is CalendarPlan => Boolean(entry))
+      .sort((left, right) => left.date.localeCompare(right.date))
+    : [];
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>('intro');
@@ -979,6 +1045,7 @@ export default function App() {
     optionIndex: number;
     date: string;
   } | null>(null);
+  const [selectedCalendarPlan, setSelectedCalendarPlan] = useState<CalendarPlan | null>(null);
   const plannerChatRef = useRef<HTMLDivElement | null>(null);
   const profilePhotoInputRef = useRef<HTMLInputElement | null>(null);
   //hehe calendar
@@ -1031,7 +1098,7 @@ export default function App() {
           ...current,
           firstName: nextProfile.firstName || current.firstName,
           lastName: nextProfile.lastName || current.lastName,
-          age: String(nextProfile.age || current.age),
+          birthDate: nextProfile.birthDate || current.birthDate,
           yearAtUf: nextProfile.yearAtUf || current.yearAtUf,
           bio: nextProfile.bio || current.bio,
           photoUrl: nextProfile.photoUrl || user.photoURL || current.photoUrl,
@@ -1109,6 +1176,26 @@ export default function App() {
 
     void loadMatchedDaters();
   }, [currentUser, profile]);
+
+  useEffect(() => {
+    if (!currentUser) {
+      setCalendarPlans([]);
+      return;
+    }
+
+    void loadUserCalendarPlans(currentUser.uid)
+      .then((plans) => {
+        setCalendarPlans(plans);
+      })
+      .catch((calendarLoadError) => {
+        setCalendarPlans(loadLocalCalendarPlans(currentUser.uid));
+        setError(
+          calendarLoadError instanceof Error
+            ? calendarLoadError.message
+            : 'Unable to load your saved calendar plans right now.',
+        );
+      });
+  }, [currentUser]);
 
   useEffect(() => {
     if (!matchedDaters.length) {
@@ -1329,11 +1416,12 @@ export default function App() {
     });
   };
 
-  const handleConfirmCalendarSave = (
+  const handleConfirmCalendarSave = async (
     option: PlannerDateOption,
+    matchId: string,
     matchName: string,
   ) => {
-    if (!pendingCalendarSave?.date) {
+    if (!pendingCalendarSave?.date || !currentUser) {
       return;
     }
 
@@ -1342,18 +1430,31 @@ export default function App() {
       title: option.title,
       place: option.place,
       description: option.description,
+      matchId,
       matchName,
       date: pendingCalendarSave.date,
     };
 
-    setCalendarPlans((current) => {
-      const withoutDuplicate = current.filter((plan) => plan.id !== nextPlan.id);
+    const nextPlans = (() => {
+      const withoutDuplicate = calendarPlans.filter((plan) => plan.id !== nextPlan.id);
       return [...withoutDuplicate, nextPlan].sort((left, right) => left.date.localeCompare(right.date));
-    });
+    })();
+
+    setCalendarPlans(nextPlans);
     setCalendarValue(new Date(`${pendingCalendarSave.date}T12:00:00`));
     setPendingCalendarSave(null);
     setActiveTab('calendar');
     setStatus(`Added "${option.title}" to your calendar.`);
+
+    try {
+      await persistCalendarPlans(currentUser.uid, nextPlans);
+    } catch (calendarSaveError) {
+      setError(
+        calendarSaveError instanceof Error
+          ? calendarSaveError.message
+          : 'Unable to sync this calendar plan right now.',
+      );
+    }
   };
 
   const getLocalProfile = (uid: string) => {
@@ -1377,6 +1478,100 @@ export default function App() {
       getProfileStorageKey(uid),
       JSON.stringify(nextProfile),
     );
+  };
+  const getCalendarStorageKey = (uid: string) => `gator-dater-calendar:${uid}`;
+
+  const loadLocalCalendarPlans = (uid: string) => {
+    if (typeof window === 'undefined') {
+      return [] as CalendarPlan[];
+    }
+
+    try {
+      const storedPlans = window.localStorage.getItem(getCalendarStorageKey(uid));
+
+      if (!storedPlans) {
+        return [] as CalendarPlan[];
+      }
+
+      return normalizeCalendarPlans(JSON.parse(storedPlans) as unknown);
+    } catch {
+      return [];
+    }
+  };
+
+  const saveLocalCalendarPlans = (uid: string, plans: CalendarPlan[]) => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    window.localStorage.setItem(getCalendarStorageKey(uid), JSON.stringify(plans));
+  };
+  const resolveCalendarPlanMatchId = (plan: CalendarPlan) => {
+    if (plan.matchId && matchedDaters.some((dater) => dater.id === plan.matchId)) {
+      return plan.matchId;
+    }
+
+    const normalizedPlanName = normalizeComparableName(plan.matchName);
+    const matchedDater = matchedDaters.find(
+      (dater) => normalizeComparableName(dater.name) === normalizedPlanName,
+    );
+
+    return matchedDater?.id || '';
+  };
+
+  const loadUserCalendarPlans = async (uid: string) => {
+    const localPlans = loadLocalCalendarPlans(uid);
+
+    if (!db) {
+      return localPlans;
+    }
+
+    try {
+      const calendarDoc = await getDoc(doc(db, 'users', uid, 'appData', 'calendar'));
+
+      if (!calendarDoc.exists()) {
+        return localPlans;
+      }
+
+      const remotePlans = normalizeCalendarPlans(calendarDoc.data()?.plans);
+      saveLocalCalendarPlans(uid, remotePlans);
+      setFirestoreHealth('connected');
+      return remotePlans;
+    } catch (calendarLoadError) {
+      if (isOfflineFirestoreError(calendarLoadError)) {
+        setFirestoreHealth('fallback');
+        return localPlans;
+      }
+
+      throw calendarLoadError;
+    }
+  };
+
+  const persistCalendarPlans = async (uid: string, plans: CalendarPlan[]) => {
+    saveLocalCalendarPlans(uid, plans);
+
+    if (!db) {
+      return;
+    }
+
+    try {
+      await setDoc(
+        doc(db, 'users', uid, 'appData', 'calendar'),
+        {
+          plans,
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true },
+      );
+      setFirestoreHealth('connected');
+    } catch (calendarSaveError) {
+      if (isOfflineFirestoreError(calendarSaveError)) {
+        setFirestoreHealth('fallback');
+        return;
+      }
+
+      throw calendarSaveError;
+    }
   };
 
   const readPhotoFile = (file: File) =>
@@ -1460,7 +1655,8 @@ export default function App() {
         `${profileForm.firstName.trim()} ${profileForm.lastName.trim()}`.trim() ||
         currentUser.displayName ||
         '',
-      age: profile?.age || Number(profileForm.age) || 18,
+      age: profileForm.birthDate ? calculateAgeFromBirthDate(profileForm.birthDate) : profile?.age || 18,
+      birthDate: profileForm.birthDate || profile?.birthDate || '',
       yearAtUf: profile?.yearAtUf || profileForm.yearAtUf || '',
       bio: profile?.bio || profileForm.bio || '',
       gender: profile?.gender || nextPreferences.genderIdentity,
@@ -1793,6 +1989,13 @@ export default function App() {
       return;
     }
 
+    const nextAge = calculateAgeFromBirthDate(profileForm.birthDate);
+
+    if (!profileForm.birthDate || nextAge < 18) {
+      setError('Enter a valid birthday for a user who is at least 18.');
+      return;
+    }
+
     setLoading(true);
     setError('');
 
@@ -1822,7 +2025,8 @@ export default function App() {
         lastName: profileForm.lastName.trim(),
         fullName,
         name: fullName,
-        age: Number(profileForm.age),
+        age: nextAge,
+        birthDate: profileForm.birthDate,
         yearAtUf: profileForm.yearAtUf,
         bio: profileForm.bio.trim(),
         gender: nextPreferences.genderIdentity,
@@ -1883,7 +2087,8 @@ export default function App() {
           lastName: profileForm.lastName.trim(),
           fullName,
           name: fullName,
-          age: Number(profileForm.age),
+          age: nextAge,
+          birthDate: profileForm.birthDate,
           yearAtUf: profileForm.yearAtUf,
           bio: profileForm.bio.trim(),
           gender: nextPreferences.genderIdentity,
@@ -1945,6 +2150,10 @@ export default function App() {
   const handleOpenPreferences = () => {
     setProfileForm((current) => ({
       ...current,
+      firstName: profile?.firstName || current.firstName,
+      lastName: profile?.lastName || current.lastName,
+      birthDate: profile?.birthDate || current.birthDate,
+      yearAtUf: profile?.yearAtUf || current.yearAtUf,
       bio: profile?.bio || current.bio,
       intention: profile?.preferences.intention || current.intention,
       genderIdentity: profile?.preferences.genderIdentity || current.genderIdentity,
@@ -1976,6 +2185,15 @@ export default function App() {
 
     const minAge = Number(profileForm.ageRangeMin);
     const maxAge = Number(profileForm.ageRangeMax);
+    const nextAge = profileForm.birthDate
+      ? calculateAgeFromBirthDate(profileForm.birthDate)
+      : profile?.age || 18;
+
+    if (!profileForm.birthDate || nextAge < 18) {
+      setError('Enter a valid birthday for a user who is at least 18.');
+      setLoading(false);
+      return;
+    }
 
     if (minAge < 18 || maxAge < 18 || minAge > maxAge) {
       setError('Choose a valid age range (minimum 18 and min <= max).');
@@ -2020,12 +2238,13 @@ export default function App() {
       '';
     const updatedProfile: UserProfile = {
       uid: currentUser.uid,
-      firstName: profile?.firstName || profileForm.firstName || '',
-      lastName: profile?.lastName || profileForm.lastName || '',
+      firstName: profileForm.firstName.trim() || profile?.firstName || '',
+      lastName: profileForm.lastName.trim() || profile?.lastName || '',
       fullName,
       name: fullName,
-      age: profile?.age || Number(profileForm.age) || 18,
-      yearAtUf: profile?.yearAtUf || profileForm.yearAtUf || '',
+      age: nextAge,
+      birthDate: profileForm.birthDate || profile?.birthDate || '',
+      yearAtUf: profileForm.yearAtUf || profile?.yearAtUf || '',
       bio: profileForm.bio.trim() || profile?.bio || '',
       gender: nextPreferences.genderIdentity,
       genderPreference: nextPreferences.genderPreference,
@@ -2523,6 +2742,8 @@ export default function App() {
     setLikedDaters([]);
     setMatchesModalOpen(false);
     setMatchedDaters([]);
+    setCalendarPlans([]);
+    setSelectedCalendarPlan(null);
     setSelectedMatchId('');
     setChatDraft('');
     setChatMessages([]);
@@ -2582,6 +2803,11 @@ export default function App() {
       const plansForSelectedDay = calendarPlans.filter((plan) =>
         isSameCalendarDay(plan.date, selectedCalendarDate),
       );
+      const plannedDates = new Set(calendarPlans.map((plan) => plan.date));
+      const selectedCalendarMatchId = selectedCalendarPlan
+        ? resolveCalendarPlanMatchId(selectedCalendarPlan)
+        : '';
+      const canOpenChatForSelectedPlan = Boolean(selectedCalendarMatchId);
 
       return (
         <>
@@ -2590,19 +2816,56 @@ export default function App() {
 
             <div>
               {/* className="calendar-grid"> */}
-              <Calendar onChange={setCalendarValue} value={calendarValue} />
+              <Calendar
+                onChange={setCalendarValue}
+                value={calendarValue}
+                tileClassName={({ date, view }) => {
+                  if (view !== 'month') {
+                    return undefined;
+                  }
+
+                  const dateKey = formatCalendarDateValue(date);
+                  const classes = [];
+
+                  if (dateKey === selectedCalendarDate) {
+                    classes.push('calendar-day-selected');
+                  }
+
+                  if (plannedDates.has(dateKey)) {
+                    classes.push('calendar-day-has-plan');
+                  }
+
+                  return classes.length ? classes.join(' ') : undefined;
+                }}
+                tileContent={({ date, view }) => {
+                  if (view !== 'month') {
+                    return null;
+                  }
+
+                  const dateKey = formatCalendarDateValue(date);
+
+                  if (!plannedDates.has(dateKey)) {
+                    return null;
+                  }
+
+                  return <span className="calendar-plan-dot" aria-hidden="true" />;
+                }}
+              />
             </div>
           </section>
 
           <section className="home-grid">
             {plansForSelectedDay.length ? (
               plansForSelectedDay.map((plan) => (
-                <article key={plan.id} className="home-tile">
+                <button
+                  key={plan.id}
+                  className="home-tile calendar-plan-card"
+                  type="button"
+                  onClick={() => setSelectedCalendarPlan(plan)}
+                >
                   <h3>{plan.title}</h3>
-                  <p>{plan.place}</p>
                   <p>With {plan.matchName} on {formatCalendarEntryLabel(plan.date)}</p>
-                  <p>{plan.description}</p>
-                </article>
+                </button>
               ))
             ) : (
               <article className="home-tile">
@@ -2611,6 +2874,46 @@ export default function App() {
               </article>
             )}
           </section>
+          {selectedCalendarPlan ? (
+            <div className="likes-modal" onClick={() => setSelectedCalendarPlan(null)}>
+              <div
+                className="likes-modal-card calendar-plan-modal"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <div className="likes-modal-header">
+                  <h2>{selectedCalendarPlan.title}</h2>
+                  <button className="link-button" type="button" onClick={() => setSelectedCalendarPlan(null)}>
+                    Close
+                  </button>
+                </div>
+                <div className="calendar-plan-modal-body">
+                  <p><strong>With:</strong> {selectedCalendarPlan.matchName}</p>
+                  <p><strong>Date:</strong> {formatCalendarEntryLabel(selectedCalendarPlan.date)}</p>
+                  <p><strong>Place:</strong> {selectedCalendarPlan.place}</p>
+                  <p>{selectedCalendarPlan.description}</p>
+                  <button
+                    className="primary-button tile-button"
+                    type="button"
+                    disabled={!canOpenChatForSelectedPlan}
+                    onClick={() => {
+                      if (!selectedCalendarMatchId) {
+                        return;
+                      }
+
+                      setSelectedMatchId(selectedCalendarMatchId);
+                      setSelectedCalendarPlan(null);
+                      setActiveTab('chats');
+                    }}
+                  >
+                    Go to chat
+                  </button>
+                  {!canOpenChatForSelectedPlan ? (
+                    <p className="account-detail">Chat is only available for active mutual matches.</p>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+          ) : null}
         </>
       );
     }
@@ -2736,6 +3039,7 @@ export default function App() {
                                   onClick={() =>
                                     handleConfirmCalendarSave(
                                       option,
+                                      selectedPlannerMatch?.id || '',
                                       selectedPlannerMatch?.name || 'your match',
                                     )
                                   }
@@ -2931,6 +3235,7 @@ export default function App() {
               <h3 style={{ textDecoration: 'underline' }}>About Me</h3>
               <p>{profile?.yearAtUf || 'UF Student'}</p>
               <p>{profile?.age ? `${profile.age} years old` : '*Add more details to make matching better.*'}</p>
+              <p>{profile?.birthDate ? `Birthday: ${formatCalendarEntryLabel(profile.birthDate)}` : '*Add your birthday*'}</p>
               <p>{profile?.bio || '*Add a bio so people can get to know you.*'}</p>
               <p>Intent: {profile?.intention || 'Open'}</p>
               <h3 style={{ textDecoration: 'underline' }}>My Preferences</h3>
@@ -2944,7 +3249,7 @@ export default function App() {
                 type="button"
                 onClick={handleOpenPreferences}
               >
-                Edit Preferences
+                Edit Profile & Preferences
               </button>
             </article>
 
@@ -3382,16 +3687,14 @@ export default function App() {
             required
           />
           <label>
-            What's your age?
+            What's your birthday?
             <input
-              type="number"
-              min="18"
-              max="99"
-              value={profileForm.age}
+              type="date"
+              max={getLatestAllowedBirthDate()}
+              value={profileForm.birthDate}
               onChange={(event) =>
-                setProfileForm((current) => ({ ...current, age: event.target.value }))
+                setProfileForm((current) => ({ ...current, birthDate: event.target.value }))
               }
-              placeholder="Age"
               required
             />
           </label>
@@ -3462,6 +3765,40 @@ export default function App() {
         <form className="auth-form" onSubmit={handlePreferencesSave}>
           {preferencesSection === 'preferences' ? (
             <>
+              <label>
+                Birthday
+                <input
+                  type="date"
+                  max={getLatestAllowedBirthDate()}
+                  value={profileForm.birthDate}
+                  onChange={(event) =>
+                    setProfileForm((current) => ({ ...current, birthDate: event.target.value }))
+                  }
+                  required
+                />
+              </label>
+              <p className="account-detail">
+                {profileForm.birthDate
+                  ? `Current age: ${calculateAgeFromBirthDate(profileForm.birthDate)}`
+                  : 'Your age will be calculated automatically from your birthday.'}
+              </p>
+              <label>
+                Year at UF
+                <select
+                  className="preferences-select"
+                  value={profileForm.yearAtUf}
+                  onChange={(event) =>
+                    setProfileForm((current) => ({ ...current, yearAtUf: event.target.value }))
+                  }
+                >
+                  <option value="">Select your year</option>
+                  {yearOptions.map((year) => (
+                    <option key={year} value={year}>
+                      {year}
+                    </option>
+                  ))}
+                </select>
+              </label>
               <label>
                 Dating Intention
                 <select
