@@ -25,7 +25,7 @@ import {
   writeBatch,
 } from 'firebase/firestore';
 import { auth, db, isFirebaseConfigured } from './firebase';
-import gatorImage from '../assets/PLEASE REPLACE.png';
+import gatorImage from '../assets/gatorDatorLogo.png';
 import heartIcon from '../assets/heartIcon.png';
 import backArrrow from '../assets/backArrowIcon.png';
 import youreAllSet from '../assets/youreAllSet.png';
@@ -840,11 +840,6 @@ const buildPlannerPrompts = (profile: UserProfile | null, selectedMatch: Dater |
       id: 'budget',
       label: 'Budget-friendly night',
       prompt: `Give me 3 affordable Gainesville date ideas for ${matchName} this week that feel thoughtful, not boring.`,
-    },
-    {
-      id: 'outdoors',
-      label: 'Outside plan',
-      prompt: `Suggest an outdoor date in Gainesville for ${matchName}, with a backup option in case it rains.`,
     },
     {
       id: 'personalized',
@@ -2648,7 +2643,7 @@ export default function App() {
             {plansForSelectedDay.length ? (
               plansForSelectedDay.map((plan) => (
                 <article key={plan.id} className="home-tile">
-                  <h3>{plan.title}</h3>
+                  <h3 style={{ textDecoration: 'underline' }}>{plan.title}</h3>
                   <p>{plan.place}</p>
                   <p>With {plan.matchName} on {formatCalendarEntryLabel(plan.date)}</p>
                   <p>{plan.description}</p>
@@ -2673,9 +2668,6 @@ export default function App() {
 
       return (
         <>
-          <p className="account-detail">
-            Pick a match, then describe the kind of date you want and get Gainesville-friendly suggestions tailored to both of you.
-          </p>
           {!isGeminiConfigured ? (
             <p className="planner-helper-text">
               Add <code>VITE_GEMINI_API_KEY</code> to <code>gator-dater-app/.env</code> to enable the chatbot.
@@ -2699,15 +2691,10 @@ export default function App() {
               >
                 {matchedDaters.map((dater) => (
                   <option key={dater.id} value={dater.id}>
-                    {dater.name} · {dater.vibe}
+                    {dater.name}
                   </option>
                 ))}
               </select>
-              {selectedPlannerMatch ? (
-                <p className="planner-helper-text">
-                  Planning for {selectedPlannerMatch.name}: {selectedPlannerMatch.bio}
-                </p>
-              ) : null}
             </section>
           )}
 
@@ -3388,7 +3375,7 @@ export default function App() {
 
   if (screen === 'profile') {
     return renderFrame(
-      <div className="screen info-screen">
+      <div className="screen info-screen pref">
         <button className="back-button" onClick={handleBack} type="button">
           <img src={backArrrow} alt="Back Arrow" />
         </button>
@@ -3785,7 +3772,7 @@ export default function App() {
       <div className="screen info-screen">
         <img src={youreAllSetImg} alt="You're All Set!" />
         <img src={gatorImg} className="gator-set" alt="Gator" />
-        <div style={{ height: '15cqh' }} />
+        <div style={{ height: '18cqh' }} />
         <button className="primary-button all-set-continue" type="button" onClick={handleContinueFromAllSet}>
           Continue
         </button>
