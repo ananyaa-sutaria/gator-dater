@@ -1081,6 +1081,7 @@ input:focus {
   border-radius: 50%;
   border: 3px solid var(--color-whitePink);
   box-shadow: 0 0px 15px var(--color-lightPink);
+  cursor: pointer;
 }
 
 .profile-photo-edit-button {
@@ -1170,6 +1171,19 @@ input:focus {
 .calendar-plan-modal {
   display: grid;
   gap: 1.5cqh;
+}
+
+.profile-preview-modal {
+  display: grid;
+  gap: 1.5cqh;
+}
+
+.profile-preview-stack {
+  min-height: 55cqh;
+}
+
+.profile-preview-swipe-card {
+  min-height: 55cqh;
 }
 
 .calendar-plan-modal-body {
