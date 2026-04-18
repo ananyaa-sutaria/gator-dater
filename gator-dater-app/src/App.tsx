@@ -1005,6 +1005,12 @@ const normalizeCalendarPlans = (value: unknown): CalendarPlan[] =>
       .filter((entry): entry is CalendarPlan => Boolean(entry))
       .sort((left, right) => left.date.localeCompare(right.date))
     : [];
+const upsertCalendarPlan = (plans: CalendarPlan[], nextPlan: CalendarPlan) => {
+  const withoutDuplicate = plans.filter((plan) => plan.id !== nextPlan.id);
+  return [...withoutDuplicate, nextPlan].sort((left, right) => left.date.localeCompare(right.date));
+};
+const removeCalendarPlan = (plans: CalendarPlan[], planId: string) =>
+  plans.filter((plan) => plan.id !== planId).sort((left, right) => left.date.localeCompare(right.date));
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>('intro');
@@ -1046,6 +1052,7 @@ export default function App() {
     date: string;
   } | null>(null);
   const [selectedCalendarPlan, setSelectedCalendarPlan] = useState<CalendarPlan | null>(null);
+  const [profilePreviewOpen, setProfilePreviewOpen] = useState(false);
   const plannerChatRef = useRef<HTMLDivElement | null>(null);
   const profilePhotoInputRef = useRef<HTMLInputElement | null>(null);
   //hehe calendar
@@ -1435,10 +1442,7 @@ export default function App() {
       date: pendingCalendarSave.date,
     };
 
-    const nextPlans = (() => {
-      const withoutDuplicate = calendarPlans.filter((plan) => plan.id !== nextPlan.id);
-      return [...withoutDuplicate, nextPlan].sort((left, right) => left.date.localeCompare(right.date));
-    })();
+    const nextPlans = upsertCalendarPlan(calendarPlans, nextPlan);
 
     setCalendarPlans(nextPlans);
     setCalendarValue(new Date(`${pendingCalendarSave.date}T12:00:00`));
@@ -1448,6 +1452,16 @@ export default function App() {
 
     try {
       await persistCalendarPlans(currentUser.uid, nextPlans);
+
+      if (matchId && profile) {
+        const mirroredPlan: CalendarPlan = {
+          ...nextPlan,
+          matchId: currentUser.uid,
+          matchName: profile.fullName || currentUser.displayName || 'Your match',
+        };
+
+        await persistSharedCalendarPlan(matchId, mirroredPlan);
+      }
     } catch (calendarSaveError) {
       setError(
         calendarSaveError instanceof Error
@@ -1571,6 +1585,95 @@ export default function App() {
       }
 
       throw calendarSaveError;
+    }
+  };
+
+  const persistSharedCalendarPlan = async (uid: string, plan: CalendarPlan) => {
+    if (!db) {
+      return;
+    }
+
+    try {
+      const calendarRef = doc(db, 'users', uid, 'appData', 'calendar');
+      const calendarSnap = await getDoc(calendarRef);
+      const existingPlans = calendarSnap.exists()
+        ? normalizeCalendarPlans(calendarSnap.data()?.plans)
+        : [];
+      const nextPlans = upsertCalendarPlan(existingPlans, plan);
+
+      await setDoc(
+        calendarRef,
+        {
+          plans: nextPlans,
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true },
+      );
+    } catch (calendarSaveError) {
+      if (isOfflineFirestoreError(calendarSaveError)) {
+        setFirestoreHealth('fallback');
+        return;
+      }
+
+      throw calendarSaveError;
+    }
+  };
+
+  const deleteSharedCalendarPlan = async (uid: string, planId: string) => {
+    if (!db) {
+      return;
+    }
+
+    try {
+      const calendarRef = doc(db, 'users', uid, 'appData', 'calendar');
+      const calendarSnap = await getDoc(calendarRef);
+      const existingPlans = calendarSnap.exists()
+        ? normalizeCalendarPlans(calendarSnap.data()?.plans)
+        : [];
+      const nextPlans = removeCalendarPlan(existingPlans, planId);
+
+      await setDoc(
+        calendarRef,
+        {
+          plans: nextPlans,
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true },
+      );
+    } catch (calendarDeleteError) {
+      if (isOfflineFirestoreError(calendarDeleteError)) {
+        setFirestoreHealth('fallback');
+        return;
+      }
+
+      throw calendarDeleteError;
+    }
+  };
+
+  const handleDeleteCalendarPlan = async (plan: CalendarPlan) => {
+    if (!currentUser) {
+      return;
+    }
+
+    const nextPlans = removeCalendarPlan(calendarPlans, plan.id);
+    const mirroredMatchId = resolveCalendarPlanMatchId(plan);
+
+    setCalendarPlans(nextPlans);
+    setSelectedCalendarPlan(null);
+    setStatus(`Deleted "${plan.title}" from your calendar.`);
+
+    try {
+      await persistCalendarPlans(currentUser.uid, nextPlans);
+
+      if (mirroredMatchId) {
+        await deleteSharedCalendarPlan(mirroredMatchId, plan.id);
+      }
+    } catch (calendarDeleteError) {
+      setError(
+        calendarDeleteError instanceof Error
+          ? calendarDeleteError.message
+          : 'Unable to delete this calendar plan right now.',
+      );
     }
   };
 
@@ -2744,6 +2847,7 @@ export default function App() {
     setMatchedDaters([]);
     setCalendarPlans([]);
     setSelectedCalendarPlan(null);
+    setProfilePreviewOpen(false);
     setSelectedMatchId('');
     setChatDraft('');
     setChatMessages([]);
@@ -2906,6 +3010,13 @@ export default function App() {
                     }}
                   >
                     Go to chat
+                  </button>
+                  <button
+                    className="secondary-button tile-button"
+                    type="button"
+                    onClick={() => void handleDeleteCalendarPlan(selectedCalendarPlan)}
+                  >
+                    Delete date
                   </button>
                   {!canOpenChatForSelectedPlan ? (
                     <p className="account-detail">Chat is only available for active mutual matches.</p>
@@ -3200,6 +3311,21 @@ export default function App() {
     }
 
     if (activeTab === 'profile-tab') {
+      const selfPreviewDater: Dater = {
+        id: currentUser?.uid || 'self-preview',
+        name: profile?.fullName || currentUser?.displayName || 'User',
+        age: profile?.age || 18,
+        yearAtUf: profile?.yearAtUf || 'UF Student',
+        bio: profile?.bio || 'Add a bio so other users can get to know you.',
+        compatibility: 100,
+        vibe: profile?.preferences.vibeWords?.[0] || profile?.dateVibe?.[0] || 'Good energy',
+        interests: profile?.interests || [],
+        dateBudget: profile?.dateBudget || 'low',
+        dateVibe: profile?.dateVibe || [],
+        availability: profile?.availability || [],
+        photoUrl: activeProfilePhoto,
+      };
+
       return (
         <>
           <section className="intro-profile-panel">
@@ -3209,11 +3335,15 @@ export default function App() {
                   src={activeProfilePhoto}
                   alt={`${profile?.fullName || currentUser?.displayName || 'User'} profile`}
                   className="profile-photo"
+                  onClick={() => setProfilePreviewOpen(true)}
                 />
                 <button
                   className="profile-photo-edit-button"
                   type="button"
-                  onClick={() => profilePhotoInputRef.current?.click()}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    profilePhotoInputRef.current?.click();
+                  }}
                   aria-label="Edit profile photo"
                 >
                   <img src={writeImg} alt="" className="profile-photo-edit-icon" />
@@ -3230,6 +3360,39 @@ export default function App() {
               onChange={handleProfilePhotoUpdate}
             />
           </section>
+          {profilePreviewOpen ? (
+            <div className="likes-modal" onClick={() => setProfilePreviewOpen(false)}>
+              <div
+                className="likes-modal-card profile-preview-modal"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <div className="likes-modal-header">
+                  <h2>Profile Preview</h2>
+                  <button className="link-button" type="button" onClick={() => setProfilePreviewOpen(false)}>
+                    Close
+                  </button>
+                </div>
+                <section className="swipe-stack profile-preview-stack">
+                  <article
+                    className="swipe-card profile-preview-swipe-card"
+                    style={{
+                      backgroundImage: selfPreviewDater.photoUrl ? `url(${selfPreviewDater.photoUrl})` : 'none',
+                    }}
+                  >
+                    <div className="swipe-overlay">
+                      <p>{selfPreviewDater.compatibility}% match</p>
+                      <h2>
+                        {selfPreviewDater.name}, {selfPreviewDater.age}
+                      </h2>
+                      <p>{selfPreviewDater.yearAtUf}</p>
+                      <p className="swipe-vibe">{selfPreviewDater.vibe}</p>
+                      <p>{selfPreviewDater.bio}</p>
+                    </div>
+                  </article>
+                </section>
+              </div>
+            </div>
+          ) : null}
           <section className="home-grid">
             <article className="profile-tile">
               <h3 style={{ textDecoration: 'underline' }}>About Me</h3>
