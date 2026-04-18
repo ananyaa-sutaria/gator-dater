@@ -135,6 +135,14 @@ type CalendarInvite = {
   createdAt: number;
 };
 
+type CalendarInviteRemoval = {
+  id: string;
+  fromUserId: string;
+  toUserId: string;
+  planId: string;
+  createdAt: number;
+};
+
 type SignUpState = {
   email: string;
   password: string;
@@ -1007,6 +1015,7 @@ const upsertCalendarPlan = (plans: CalendarPlan[], nextPlan: CalendarPlan) => {
 };
 const removeCalendarPlan = (plans: CalendarPlan[], planId: string) =>
   plans.filter((plan) => plan.id !== planId).sort((left, right) => left.date.localeCompare(right.date));
+/*
 const isCalendarDebugEnabled = () => {
   if (typeof window === 'undefined') {
     return false;
@@ -1040,6 +1049,12 @@ const debugCalendar = (step: string, details?: unknown) => {
 
   console.log(`[calendar-debug ${timestamp}] ${step}`, details);
 };
+*/
+const getFirestoreErrorMeta = (_error: unknown) => ({
+  code: 'debug-disabled',
+  message: 'debug-disabled',
+});
+const debugCalendar = (_step: string, _details?: unknown) => {};
 const normalizeCalendarInvite = (value: unknown): CalendarInvite | null => {
   if (typeof value !== 'object' || value === null) {
     return null;
@@ -1077,6 +1092,37 @@ const normalizeCalendarInvites = (value: unknown): CalendarInvite[] =>
     ? value
       .map((entry) => normalizeCalendarInvite(entry))
       .filter((entry): entry is CalendarInvite => Boolean(entry))
+      .sort((left, right) => left.createdAt - right.createdAt)
+    : [];
+const normalizeCalendarInviteRemoval = (value: unknown): CalendarInviteRemoval | null => {
+  if (typeof value !== 'object' || value === null) {
+    return null;
+  }
+
+  const rawRemoval = value as Record<string, unknown>;
+  const id = typeof rawRemoval.id === 'string' ? rawRemoval.id : '';
+  const fromUserId = typeof rawRemoval.fromUserId === 'string' ? rawRemoval.fromUserId : '';
+  const toUserId = typeof rawRemoval.toUserId === 'string' ? rawRemoval.toUserId : '';
+  const planId = typeof rawRemoval.planId === 'string' ? rawRemoval.planId : '';
+  const createdAt = typeof rawRemoval.createdAt === 'number' ? rawRemoval.createdAt : 0;
+
+  if (!id || !fromUserId || !toUserId || !planId) {
+    return null;
+  }
+
+  return {
+    id,
+    fromUserId,
+    toUserId,
+    planId,
+    createdAt,
+  };
+};
+const normalizeCalendarInviteRemovals = (value: unknown): CalendarInviteRemoval[] =>
+  Array.isArray(value)
+    ? value
+      .map((entry) => normalizeCalendarInviteRemoval(entry))
+      .filter((entry): entry is CalendarInviteRemoval => Boolean(entry))
       .sort((left, right) => left.createdAt - right.createdAt)
     : [];
 const isPermissionDeniedFirestoreError = (error: unknown) => {
@@ -1383,81 +1429,123 @@ export default function App() {
         conversationId: getConversationId(currentUser.uid, dater.id),
       });
 
-      return onSnapshot(conversationRef, async (snapshot) => {
-        if (!snapshot.exists()) {
-          debugCalendar('conversation snapshot missing', {
-            conversationId: getConversationId(currentUser.uid, dater.id),
-          });
-          return;
-        }
-
-        const incomingInvites = normalizeCalendarInvites(snapshot.data()?.calendarInvites)
-          .filter((invite) => invite.toUserId === currentUser.uid);
-
-        debugCalendar('conversation snapshot received', {
-          conversationId: getConversationId(currentUser.uid, dater.id),
-          totalInviteCount: normalizeCalendarInvites(snapshot.data()?.calendarInvites).length,
-          incomingInviteCount: incomingInvites.length,
-          incomingInviteIds: incomingInvites.map((invite) => invite.id),
-        });
-
-        if (!incomingInvites.length) {
-          return;
-        }
-
-        const invitePlans: CalendarPlan[] = incomingInvites.map((invite) => ({
-          id: invite.id,
-          title: invite.title,
-          place: invite.place,
-          description: invite.description,
-          matchId: invite.fromUserId,
-          matchName: invite.fromUserName,
-          date: invite.date,
-        }));
-
-        const nextPlans = invitePlans.reduce((plans, invitePlan) => {
-          if (plans.some((plan) => plan.id === invitePlan.id)) {
-            return plans;
+      return onSnapshot(
+        conversationRef,
+        async (snapshot) => {
+          if (!snapshot.exists()) {
+            debugCalendar('conversation snapshot missing', {
+              conversationId: getConversationId(currentUser.uid, dater.id),
+            });
+            return;
           }
 
-          return upsertCalendarPlan(plans, invitePlan);
-        }, calendarPlans);
+          const incomingInvites = normalizeCalendarInvites(snapshot.data()?.calendarInvites)
+            .filter((invite) => invite.toUserId === currentUser.uid);
+          const incomingRemovals = normalizeCalendarInviteRemovals(snapshot.data()?.calendarInviteRemovals)
+            .filter((removal) => removal.toUserId === currentUser.uid);
 
-        if (nextPlans.length === calendarPlans.length) {
-          debugCalendar('invite import skipped (already present)', {
+          debugCalendar('conversation snapshot received', {
+            conversationId: getConversationId(currentUser.uid, dater.id),
+            totalInviteCount: normalizeCalendarInvites(snapshot.data()?.calendarInvites).length,
+            incomingInviteCount: incomingInvites.length,
+            incomingInviteIds: incomingInvites.map((invite) => invite.id),
+            incomingRemovalCount: incomingRemovals.length,
+            incomingRemovalPlanIds: incomingRemovals.map((removal) => removal.planId),
+          });
+
+          if (!incomingInvites.length && !incomingRemovals.length) {
+            return;
+          }
+
+          const invitePlans: CalendarPlan[] = incomingInvites.map((invite) => ({
+            id: invite.id,
+            title: invite.title,
+            place: invite.place,
+            description: invite.description,
+            matchId: invite.fromUserId,
+            matchName: invite.fromUserName,
+            date: invite.date,
+          }));
+
+          let importedCount = 0;
+          let removedCount = 0;
+          let hasCalendarChanges = false;
+          let nextPlansToPersist: CalendarPlan[] = [];
+          const removalPlanIds = new Set(incomingRemovals.map((removal) => removal.planId));
+
+          setCalendarPlans((currentPlans) => {
+            let nextPlans = invitePlans.reduce((plans, invitePlan) => {
+              if (plans.some((plan) => plan.id === invitePlan.id)) {
+                return plans;
+              }
+
+              importedCount += 1;
+              return upsertCalendarPlan(plans, invitePlan);
+            }, currentPlans);
+
+            if (removalPlanIds.size) {
+              const filteredPlans = nextPlans.filter((plan) => !removalPlanIds.has(plan.id));
+              removedCount = nextPlans.length - filteredPlans.length;
+              nextPlans = filteredPlans;
+            }
+
+            if (!importedCount && !removedCount) {
+              return currentPlans;
+            }
+
+            hasCalendarChanges = true;
+            nextPlansToPersist = nextPlans;
+            return nextPlans;
+          });
+
+          if (!hasCalendarChanges) {
+            debugCalendar('invite/removal sync skipped (already up to date)', {
+              currentUid: currentUser.uid,
+              conversationId: getConversationId(currentUser.uid, dater.id),
+            });
+            return;
+          }
+
+          debugCalendar('invite/removal synced into recipient calendar state', {
+            currentUid: currentUser.uid,
+            importedCount,
+            removedCount,
+            planCount: nextPlansToPersist.length,
+          });
+
+          try {
+            await persistCalendarPlans(currentUser.uid, nextPlansToPersist);
+          } catch (calendarSaveError) {
+            debugCalendar('invite persist after import failed', {
+              currentUid: currentUser.uid,
+              ...getFirestoreErrorMeta(calendarSaveError),
+            });
+            setError(
+              calendarSaveError instanceof Error
+                ? calendarSaveError.message
+                : 'Unable to sync a shared date to your calendar right now.',
+            );
+          }
+        },
+        (conversationError) => {
+          debugCalendar('conversation invite snapshot error', {
             currentUid: currentUser.uid,
             conversationId: getConversationId(currentUser.uid, dater.id),
-          });
-          return;
-        }
-
-        setCalendarPlans(nextPlans);
-        debugCalendar('invite imported into recipient calendar state', {
-          currentUid: currentUser.uid,
-          importedCount: nextPlans.length - calendarPlans.length,
-          planCount: nextPlans.length,
-        });
-
-        try {
-          await persistCalendarPlans(currentUser.uid, nextPlans);
-        } catch (calendarSaveError) {
-          debugCalendar('invite persist after import failed', {
-            currentUid: currentUser.uid,
-            ...getFirestoreErrorMeta(calendarSaveError),
+            ...getFirestoreErrorMeta(conversationError),
           });
           setError(
-            calendarSaveError instanceof Error
-              ? calendarSaveError.message
-              : 'Unable to sync a shared date to your calendar right now.',
+            conversationError instanceof Error
+              ? conversationError.message
+              : 'Unable to listen for shared calendar updates right now.',
           );
-        }
-      });
+        },
+      );
     });
 
     return () => {
       unsubscribers.forEach((unsubscribe) => unsubscribe());
     };
-  }, [currentUser, matchedDaters, calendarPlans]);
+  }, [currentUser, matchedDaters]);
 
   useEffect(() => {
     if (!matchedDaters.length) {
@@ -2006,7 +2094,7 @@ export default function App() {
   };
 
   const deleteSharedCalendarPlan = async (uid: string, planId: string) => {
-    if (!db) {
+    if (!db || !currentUser) {
       return;
     }
 
@@ -2027,6 +2115,11 @@ export default function App() {
         { merge: true },
       );
     } catch (calendarDeleteError) {
+      if (isPermissionDeniedFirestoreError(calendarDeleteError)) {
+        await persistCalendarInviteRemoval(uid, planId);
+        return;
+      }
+
       if (isOfflineFirestoreError(calendarDeleteError)) {
         setFirestoreHealth('fallback');
         return;
@@ -2034,6 +2127,41 @@ export default function App() {
 
       throw calendarDeleteError;
     }
+  };
+
+  const persistCalendarInviteRemoval = async (recipientUid: string, planId: string) => {
+    if (!db || !currentUser) {
+      return;
+    }
+
+    const conversationId = getConversationId(currentUser.uid, recipientUid);
+    const conversationRef = doc(db, 'conversations', conversationId);
+    const conversationSnap = await getDoc(conversationRef);
+    const existingRemovals = conversationSnap.exists()
+      ? normalizeCalendarInviteRemovals(conversationSnap.data()?.calendarInviteRemovals)
+      : [];
+    const removalId = `${planId}__rm__${currentUser.uid}__${recipientUid}`;
+    const removalEvent: CalendarInviteRemoval = {
+      id: removalId,
+      fromUserId: currentUser.uid,
+      toUserId: recipientUid,
+      planId,
+      createdAt: Date.now(),
+    };
+    const nextRemovals = [
+      ...existingRemovals.filter((removal) => removal.id !== removalId),
+      removalEvent,
+    ];
+
+    await setDoc(
+      conversationRef,
+      {
+        participants: getConversationParticipantIds(currentUser.uid, recipientUid),
+        updatedAt: serverTimestamp(),
+        calendarInviteRemovals: nextRemovals,
+      },
+      { merge: true },
+    );
   };
 
   const handleDeleteCalendarPlan = async (plan: CalendarPlan) => {
@@ -2048,17 +2176,32 @@ export default function App() {
     setSelectedCalendarPlan(null);
     setStatus(`Deleted "${plan.title}" from your calendar.`);
 
+    let senderDeleteError: unknown = null;
+
     try {
       await persistCalendarPlans(currentUser.uid, nextPlans);
-
-      if (mirroredMatchId) {
-        await deleteSharedCalendarPlan(mirroredMatchId, plan.id);
-      }
     } catch (calendarDeleteError) {
+      senderDeleteError = calendarDeleteError;
+    }
+
+    if (mirroredMatchId) {
+      try {
+        await deleteSharedCalendarPlan(mirroredMatchId, plan.id);
+      } catch (mirroredDeleteError) {
+        setError(
+          mirroredDeleteError instanceof Error
+            ? mirroredDeleteError.message
+            : 'Unable to sync this deletion with your match right now.',
+        );
+        return;
+      }
+    }
+
+    if (senderDeleteError) {
       setError(
-        calendarDeleteError instanceof Error
-          ? calendarDeleteError.message
-          : 'Unable to delete this calendar plan right now.',
+        senderDeleteError instanceof Error
+          ? `Deleted locally and synced, but your own Firestore delete failed: ${senderDeleteError.message}`
+          : 'Deleted locally and synced, but your own Firestore delete failed.',
       );
     }
   };
