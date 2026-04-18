@@ -123,6 +123,18 @@ type CalendarPlan = {
   date: string;
 };
 
+type CalendarInvite = {
+  id: string;
+  fromUserId: string;
+  fromUserName: string;
+  toUserId: string;
+  title: string;
+  place: string;
+  description: string;
+  date: string;
+  createdAt: number;
+};
+
 type SignUpState = {
   email: string;
   password: string;
@@ -995,6 +1007,89 @@ const upsertCalendarPlan = (plans: CalendarPlan[], nextPlan: CalendarPlan) => {
 };
 const removeCalendarPlan = (plans: CalendarPlan[], planId: string) =>
   plans.filter((plan) => plan.id !== planId).sort((left, right) => left.date.localeCompare(right.date));
+const isCalendarDebugEnabled = () => {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+
+  const queryParamEnabled = new URLSearchParams(window.location.search).get('debugCalendar') === '1';
+  const localStorageEnabled = window.localStorage.getItem('calendar-debug') === '1';
+
+  return queryParamEnabled || localStorageEnabled;
+};
+const getFirestoreErrorMeta = (error: unknown) => {
+  const code =
+    typeof error === 'object' && error !== null && 'code' in error
+      ? String((error as { code?: unknown }).code)
+      : 'unknown';
+  const message = error instanceof Error ? error.message : 'Unknown Firestore error';
+
+  return { code, message };
+};
+const debugCalendar = (step: string, details?: unknown) => {
+  if (!isCalendarDebugEnabled()) {
+    return;
+  }
+
+  const timestamp = new Date().toISOString();
+
+  if (typeof details === 'undefined') {
+    console.log(`[calendar-debug ${timestamp}] ${step}`);
+    return;
+  }
+
+  console.log(`[calendar-debug ${timestamp}] ${step}`, details);
+};
+const normalizeCalendarInvite = (value: unknown): CalendarInvite | null => {
+  if (typeof value !== 'object' || value === null) {
+    return null;
+  }
+
+  const rawInvite = value as Record<string, unknown>;
+  const id = typeof rawInvite.id === 'string' ? rawInvite.id : '';
+  const fromUserId = typeof rawInvite.fromUserId === 'string' ? rawInvite.fromUserId : '';
+  const fromUserName = typeof rawInvite.fromUserName === 'string' ? rawInvite.fromUserName : '';
+  const toUserId = typeof rawInvite.toUserId === 'string' ? rawInvite.toUserId : '';
+  const title = typeof rawInvite.title === 'string' ? rawInvite.title : '';
+  const place = typeof rawInvite.place === 'string' ? rawInvite.place : '';
+  const description = typeof rawInvite.description === 'string' ? rawInvite.description : '';
+  const date = typeof rawInvite.date === 'string' ? rawInvite.date : '';
+  const createdAt = typeof rawInvite.createdAt === 'number' ? rawInvite.createdAt : 0;
+
+  if (!id || !fromUserId || !toUserId || !title || !date) {
+    return null;
+  }
+
+  return {
+    id,
+    fromUserId,
+    fromUserName,
+    toUserId,
+    title,
+    place,
+    description,
+    date,
+    createdAt,
+  };
+};
+const normalizeCalendarInvites = (value: unknown): CalendarInvite[] =>
+  Array.isArray(value)
+    ? value
+      .map((entry) => normalizeCalendarInvite(entry))
+      .filter((entry): entry is CalendarInvite => Boolean(entry))
+      .sort((left, right) => left.createdAt - right.createdAt)
+    : [];
+const isPermissionDeniedFirestoreError = (error: unknown) => {
+  if (typeof error !== 'object' || error === null) {
+    return false;
+  }
+
+  if ('code' in error && typeof (error as { code?: unknown }).code === 'string') {
+    return String((error as { code?: unknown }).code).includes('permission-denied');
+  }
+
+  return false;
+};
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>('intro');
@@ -1211,18 +1306,53 @@ export default function App() {
       return;
     }
 
-    void loadUserCalendarPlans(currentUser.uid)
-      .then((plans) => {
-        setCalendarPlans(plans);
-      })
-      .catch((calendarLoadError) => {
+    if (!db) {
+      setCalendarPlans(loadLocalCalendarPlans(currentUser.uid));
+      return;
+    }
+
+    const calendarRef = doc(db, 'users', currentUser.uid, 'appData', 'calendar');
+    debugCalendar('subscribe user calendar snapshot', { uid: currentUser.uid });
+
+    const unsubscribe = onSnapshot(
+      calendarRef,
+      (snapshot) => {
+        const nextPlans = snapshot.exists()
+          ? normalizeCalendarPlans(snapshot.data()?.plans)
+          : loadLocalCalendarPlans(currentUser.uid);
+
+        debugCalendar('user calendar snapshot received', {
+          uid: currentUser.uid,
+          exists: snapshot.exists(),
+          planCount: nextPlans.length,
+          planIds: nextPlans.map((plan) => plan.id),
+        });
+
+        saveLocalCalendarPlans(currentUser.uid, nextPlans);
+        setCalendarPlans(nextPlans);
+        setFirestoreHealth('connected');
+      },
+      (calendarLoadError) => {
+        debugCalendar('user calendar snapshot error', {
+          uid: currentUser.uid,
+          ...getFirestoreErrorMeta(calendarLoadError),
+        });
         setCalendarPlans(loadLocalCalendarPlans(currentUser.uid));
+
+        if (isOfflineFirestoreError(calendarLoadError)) {
+          setFirestoreHealth('fallback');
+          return;
+        }
+
         setError(
           calendarLoadError instanceof Error
             ? calendarLoadError.message
             : 'Unable to load your saved calendar plans right now.',
         );
-      });
+      },
+    );
+
+    return () => unsubscribe();
   }, [currentUser]);
 
   useEffect(() => {
@@ -1237,6 +1367,97 @@ export default function App() {
         : '',
     );
   }, [matchedDaters]);
+
+  useEffect(() => {
+    if (!db || !currentUser || !matchedDaters.length) {
+      return;
+    }
+
+    const firestore = db;
+
+    const unsubscribers = matchedDaters.map((dater) => {
+      const conversationRef = doc(firestore, 'conversations', getConversationId(currentUser.uid, dater.id));
+      debugCalendar('subscribe conversation invite snapshot', {
+        currentUid: currentUser.uid,
+        matchUid: dater.id,
+        conversationId: getConversationId(currentUser.uid, dater.id),
+      });
+
+      return onSnapshot(conversationRef, async (snapshot) => {
+        if (!snapshot.exists()) {
+          debugCalendar('conversation snapshot missing', {
+            conversationId: getConversationId(currentUser.uid, dater.id),
+          });
+          return;
+        }
+
+        const incomingInvites = normalizeCalendarInvites(snapshot.data()?.calendarInvites)
+          .filter((invite) => invite.toUserId === currentUser.uid);
+
+        debugCalendar('conversation snapshot received', {
+          conversationId: getConversationId(currentUser.uid, dater.id),
+          totalInviteCount: normalizeCalendarInvites(snapshot.data()?.calendarInvites).length,
+          incomingInviteCount: incomingInvites.length,
+          incomingInviteIds: incomingInvites.map((invite) => invite.id),
+        });
+
+        if (!incomingInvites.length) {
+          return;
+        }
+
+        const invitePlans: CalendarPlan[] = incomingInvites.map((invite) => ({
+          id: invite.id,
+          title: invite.title,
+          place: invite.place,
+          description: invite.description,
+          matchId: invite.fromUserId,
+          matchName: invite.fromUserName,
+          date: invite.date,
+        }));
+
+        const nextPlans = invitePlans.reduce((plans, invitePlan) => {
+          if (plans.some((plan) => plan.id === invitePlan.id)) {
+            return plans;
+          }
+
+          return upsertCalendarPlan(plans, invitePlan);
+        }, calendarPlans);
+
+        if (nextPlans.length === calendarPlans.length) {
+          debugCalendar('invite import skipped (already present)', {
+            currentUid: currentUser.uid,
+            conversationId: getConversationId(currentUser.uid, dater.id),
+          });
+          return;
+        }
+
+        setCalendarPlans(nextPlans);
+        debugCalendar('invite imported into recipient calendar state', {
+          currentUid: currentUser.uid,
+          importedCount: nextPlans.length - calendarPlans.length,
+          planCount: nextPlans.length,
+        });
+
+        try {
+          await persistCalendarPlans(currentUser.uid, nextPlans);
+        } catch (calendarSaveError) {
+          debugCalendar('invite persist after import failed', {
+            currentUid: currentUser.uid,
+            ...getFirestoreErrorMeta(calendarSaveError),
+          });
+          setError(
+            calendarSaveError instanceof Error
+              ? calendarSaveError.message
+              : 'Unable to sync a shared date to your calendar right now.',
+          );
+        }
+      });
+    });
+
+    return () => {
+      unsubscribers.forEach((unsubscribe) => unsubscribe());
+    };
+  }, [currentUser, matchedDaters, calendarPlans]);
 
   useEffect(() => {
     if (!matchedDaters.length) {
@@ -1470,24 +1691,66 @@ export default function App() {
     setPendingCalendarSave(null);
     setActiveTab('calendar');
     setStatus(`Added "${option.title}" to your calendar.`);
+    debugCalendar('sender saved planner date (local state)', {
+      currentUid: currentUser.uid,
+      matchId,
+      planId: nextPlan.id,
+      date: nextPlan.date,
+      title: nextPlan.title,
+    });
+
+    let senderSaveError: unknown = null;
 
     try {
       await persistCalendarPlans(currentUser.uid, nextPlans);
-
-      if (matchId && profile) {
-        const mirroredPlan: CalendarPlan = {
-          ...nextPlan,
-          matchId: currentUser.uid,
-          matchName: profile.fullName || currentUser.displayName || 'Your match',
-        };
-
-        await persistSharedCalendarPlan(matchId, mirroredPlan);
-      }
+      debugCalendar('sender calendar persisted', {
+        currentUid: currentUser.uid,
+        planId: nextPlan.id,
+        planCount: nextPlans.length,
+      });
     } catch (calendarSaveError) {
+      senderSaveError = calendarSaveError;
+      debugCalendar('sender calendar persist failed, continuing share flow', {
+        currentUid: currentUser.uid,
+        ...getFirestoreErrorMeta(calendarSaveError),
+      });
+    }
+
+    if (matchId && profile) {
+      const mirroredPlan: CalendarPlan = {
+        ...nextPlan,
+        matchId: currentUser.uid,
+        matchName: profile.fullName || currentUser.displayName || 'Your match',
+      };
+
+      debugCalendar('attempting shared calendar mirror', {
+        senderUid: currentUser.uid,
+        recipientUid: matchId,
+        planId: mirroredPlan.id,
+      });
+
+      try {
+        await persistSharedCalendarPlan(matchId, mirroredPlan);
+      } catch (shareSaveError) {
+        debugCalendar('shared calendar mirror flow failed', {
+          senderUid: currentUser.uid,
+          recipientUid: matchId,
+          ...getFirestoreErrorMeta(shareSaveError),
+        });
+        setError(
+          shareSaveError instanceof Error
+            ? shareSaveError.message
+            : 'Unable to sync this calendar plan with your match right now.',
+        );
+        return;
+      }
+    }
+
+    if (senderSaveError) {
       setError(
-        calendarSaveError instanceof Error
-          ? calendarSaveError.message
-          : 'Unable to sync this calendar plan right now.',
+        senderSaveError instanceof Error
+          ? `Saved locally and shared, but your own Firestore calendar write failed: ${senderSaveError.message}`
+          : 'Saved locally and shared, but your own Firestore calendar write failed.',
       );
     }
   };
@@ -1598,8 +1861,17 @@ export default function App() {
         },
         { merge: true },
       );
+      debugCalendar('persistCalendarPlans success', {
+        uid,
+        planCount: plans.length,
+        planIds: plans.map((plan) => plan.id),
+      });
       setFirestoreHealth('connected');
     } catch (calendarSaveError) {
+      debugCalendar('persistCalendarPlans failed', {
+        uid,
+        ...getFirestoreErrorMeta(calendarSaveError),
+      });
       if (isOfflineFirestoreError(calendarSaveError)) {
         setFirestoreHealth('fallback');
         return;
@@ -1610,11 +1882,16 @@ export default function App() {
   };
 
   const persistSharedCalendarPlan = async (uid: string, plan: CalendarPlan) => {
-    if (!db) {
+    if (!db || !currentUser || !profile) {
       return;
     }
 
     try {
+      debugCalendar('persistSharedCalendarPlan start', {
+        senderUid: currentUser.uid,
+        recipientUid: uid,
+        planId: plan.id,
+      });
       const calendarRef = doc(db, 'users', uid, 'appData', 'calendar');
       const calendarSnap = await getDoc(calendarRef);
       const existingPlans = calendarSnap.exists()
@@ -1630,13 +1907,101 @@ export default function App() {
         },
         { merge: true },
       );
+      debugCalendar('persistSharedCalendarPlan success', {
+        senderUid: currentUser.uid,
+        recipientUid: uid,
+        planId: plan.id,
+        recipientPlanCount: nextPlans.length,
+      });
     } catch (calendarSaveError) {
+      if (isPermissionDeniedFirestoreError(calendarSaveError)) {
+        debugCalendar('persistSharedCalendarPlan permission denied, using invite fallback', {
+          senderUid: currentUser.uid,
+          recipientUid: uid,
+          planId: plan.id,
+          ...getFirestoreErrorMeta(calendarSaveError),
+        });
+        await persistCalendarInvite(uid, plan);
+        return;
+      }
+
+      debugCalendar('persistSharedCalendarPlan failed', {
+        senderUid: currentUser.uid,
+        recipientUid: uid,
+        planId: plan.id,
+        ...getFirestoreErrorMeta(calendarSaveError),
+      });
+
       if (isOfflineFirestoreError(calendarSaveError)) {
         setFirestoreHealth('fallback');
         return;
       }
 
       throw calendarSaveError;
+    }
+  };
+
+  const persistCalendarInvite = async (recipientUid: string, plan: CalendarPlan) => {
+    if (!db || !currentUser || !profile) {
+      return;
+    }
+
+    const conversationId = getConversationId(currentUser.uid, recipientUid);
+    const conversationRef = doc(db, 'conversations', conversationId);
+    debugCalendar('persistCalendarInvite start', {
+      senderUid: currentUser.uid,
+      recipientUid,
+      conversationId,
+      planId: plan.id,
+    });
+    const conversationSnap = await getDoc(conversationRef);
+    const existingInvites = conversationSnap.exists()
+      ? normalizeCalendarInvites(conversationSnap.data()?.calendarInvites)
+      : [];
+    const inviteId = `${plan.id}__${currentUser.uid}__${recipientUid}`;
+    const invite: CalendarInvite = {
+      id: inviteId,
+      fromUserId: currentUser.uid,
+      fromUserName: profile.fullName || currentUser.displayName || 'Your match',
+      toUserId: recipientUid,
+      title: plan.title,
+      place: plan.place,
+      description: plan.description,
+      date: plan.date,
+      createdAt: Date.now(),
+    };
+
+    const nextInvites = [
+      ...existingInvites.filter((existingInvite) => existingInvite.id !== inviteId),
+      invite,
+    ];
+
+    try {
+      await setDoc(
+        conversationRef,
+        {
+          participants: getConversationParticipantIds(currentUser.uid, recipientUid),
+          updatedAt: serverTimestamp(),
+          calendarInvites: nextInvites,
+        },
+        { merge: true },
+      );
+      debugCalendar('persistCalendarInvite success', {
+        senderUid: currentUser.uid,
+        recipientUid,
+        conversationId,
+        inviteId,
+        inviteCount: nextInvites.length,
+      });
+    } catch (inviteError) {
+      debugCalendar('persistCalendarInvite failed', {
+        senderUid: currentUser.uid,
+        recipientUid,
+        conversationId,
+        inviteId,
+        ...getFirestoreErrorMeta(inviteError),
+      });
+      throw inviteError;
     }
   };
 
@@ -2946,12 +3311,35 @@ export default function App() {
 
   const renderTabContent = () => {
     if (activeTab === 'calendar') {
+      const selectedCalendarValue = isSingleCalendarDate(calendarValue) ? calendarValue : new Date();
       const selectedCalendarDate = isSingleCalendarDate(calendarValue)
         ? formatCalendarDateValue(calendarValue)
         : formatCalendarDateValue(new Date());
       const plansForSelectedDay = calendarPlans.filter((plan) =>
         isSameCalendarDay(plan.date, selectedCalendarDate),
       );
+      const selectedDayPrimaryPlan = plansForSelectedDay[0] || null;
+      const todayCalendarDate = formatCalendarDateValue(new Date());
+      const selectedMonthStart = new Date(
+        selectedCalendarValue.getFullYear(),
+        selectedCalendarValue.getMonth(),
+        1,
+      );
+      const selectedMonthEnd = new Date(
+        selectedCalendarValue.getFullYear(),
+        selectedCalendarValue.getMonth() + 1,
+        0,
+      );
+      const monthLabel = selectedCalendarValue.toLocaleDateString([], {
+        month: 'long',
+        year: 'numeric',
+      });
+      const upcomingPlansForMonth = calendarPlans.filter((plan) => {
+        const planDate = new Date(`${plan.date}T12:00:00`);
+        return planDate >= selectedMonthStart && planDate <= selectedMonthEnd && plan.date >= todayCalendarDate;
+      });
+      const nextPlannedDate = upcomingPlansForMonth[0] || null;
+      const restOfMonthPlans = upcomingPlansForMonth.slice(1);
       const plannedDates = new Set(calendarPlans.map((plan) => plan.date));
       const selectedCalendarMatchId = selectedCalendarPlan
         ? resolveCalendarPlanMatchId(selectedCalendarPlan)
@@ -3004,18 +3392,18 @@ export default function App() {
           </section>
 
           <section className="home-grid">
-            {plansForSelectedDay.length ? (
-              plansForSelectedDay.map((plan) => (
-                <button
-                  key={plan.id}
-                  className="home-tile calendar-plan-card"
-                  type="button"
-                  onClick={() => setSelectedCalendarPlan(plan)}
-                >
-                  <h3>{plan.title}</h3>
-                  <p>With {plan.matchName} on {formatCalendarEntryLabel(plan.date)}</p>
-                </button>
-              ))
+            {selectedDayPrimaryPlan ? (
+              <button
+                key={selectedDayPrimaryPlan.id}
+                className="home-tile calendar-plan-card calendar-selected-plan"
+                type="button"
+                onClick={() => setSelectedCalendarPlan(selectedDayPrimaryPlan)}
+              >
+                <h3>{selectedDayPrimaryPlan.title}</h3>
+                <p>With {selectedDayPrimaryPlan.matchName} on {formatCalendarEntryLabel(selectedDayPrimaryPlan.date)}</p>
+                <p>{selectedDayPrimaryPlan.place}</p>
+                <p>{selectedDayPrimaryPlan.description}</p>
+              </button>
             ) : (
               <article className="home-tile">
                 <h3>No saved dates for this day</h3>
@@ -3023,6 +3411,52 @@ export default function App() {
               </article>
             )}
           </section>
+
+          {!selectedDayPrimaryPlan ? (
+            <section className="home-grid calendar-upcoming-list">
+              <article className="home-tile">
+                <h3>Upcoming in {monthLabel}</h3>
+                {nextPlannedDate ? (
+                  <>
+                    <p className="account-label">Next date planned</p>
+                    <button
+                      className="home-tile calendar-plan-card calendar-next-plan"
+                      type="button"
+                      onClick={() => setSelectedCalendarPlan(nextPlannedDate)}
+                    >
+                      <h3>{nextPlannedDate.title}</h3>
+                      <p>With {nextPlannedDate.matchName} on {formatCalendarEntryLabel(nextPlannedDate.date)}</p>
+                      <p>{nextPlannedDate.place}</p>
+                      <p>{nextPlannedDate.description}</p>
+                    </button>
+                  </>
+                ) : (
+                  <p>No more dates planned for the rest of this month.</p>
+                )}
+              </article>
+
+              {restOfMonthPlans.length ? (
+                <article className="home-tile">
+                  <h3>Rest of month</h3>
+                  <div className="calendar-month-list">
+                    {restOfMonthPlans.map((plan) => (
+                      <button
+                        key={`month-${plan.id}`}
+                        className="home-tile calendar-plan-card"
+                        type="button"
+                        onClick={() => setSelectedCalendarPlan(plan)}
+                      >
+                        <h3>{plan.title}</h3>
+                        <p>With {plan.matchName} on {formatCalendarEntryLabel(plan.date)}</p>
+                        <p>{plan.place}</p>
+                      </button>
+                    ))}
+                  </div>
+                </article>
+              ) : null}
+            </section>
+          ) : null}
+
           {selectedCalendarPlan ? (
             <div className="likes-modal" onClick={() => setSelectedCalendarPlan(null)}>
               <div
