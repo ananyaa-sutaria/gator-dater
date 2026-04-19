@@ -694,6 +694,26 @@ hr {
   margin: 0;
 }
 
+.calendar-upcoming-list {
+  gap: 1cqh;
+}
+
+.calendar-next-plan {
+  margin-top: 0.8cqh;
+  border: 2px solid var(--color-pink) !important;
+}
+
+.calendar-selected-plan {
+  border: 2px solid var(--color-darkPink) !important;
+  background: #fff3f8 !important;
+}
+
+.calendar-month-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8cqh;
+}
+
 .chat-match-row {
   display: flex;
   align-items: center;
