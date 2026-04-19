@@ -257,6 +257,7 @@ p, label, input {
 .react-calendar__tile {
   background: #fff !important;
   color: var(--color-blackPink) !important;
+  position: relative;
 }
 
 .react-calendar__tile--now {
@@ -266,6 +267,26 @@ p, label, input {
 
 .react-calendar__month-view__days__day--weekend {
   color: #d10000;
+}
+
+.react-calendar__tile.calendar-tile--planned {
+  box-shadow: inset 0 0 0 2px var(--color-green);
+}
+
+.react-calendar__tile.calendar-tile--planned::after {
+  content: '';
+  position: absolute;
+  bottom: 5px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-green);
+}
+
+.react-calendar__tile--now.calendar-tile--planned::after {
+  background: var(--color-blackPink);
 }
 
 .auth-form,

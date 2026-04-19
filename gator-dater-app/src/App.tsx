@@ -2621,6 +2621,7 @@ export default function App() {
 
   const renderTabContent = () => {
     if (activeTab === 'calendar') {
+      const plannedDateSet = new Set(calendarPlans.map((plan) => plan.date));
       const selectedCalendarDate = isSingleCalendarDate(calendarValue)
         ? formatCalendarDateValue(calendarValue)
         : formatCalendarDateValue(new Date());
@@ -2635,7 +2636,15 @@ export default function App() {
 
             <div>
               {/* className="calendar-grid"> */}
-              <Calendar onChange={setCalendarValue} value={calendarValue} />
+              <Calendar
+                onChange={setCalendarValue}
+                value={calendarValue}
+                tileClassName={({ date, view }) =>
+                  view === 'month' && plannedDateSet.has(formatCalendarDateValue(date))
+                    ? 'calendar-tile--planned'
+                    : undefined
+                }
+              />
             </div>
           </section>
 
