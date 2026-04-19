@@ -25,7 +25,7 @@ import {
   writeBatch,
 } from 'firebase/firestore';
 import { auth, db, isFirebaseConfigured } from './firebase';
-import gatorImage from '../assets/PLEASE REPLACE.png';
+import gatorImage from '../assets/gatorDatorLogo.png';
 import heartIcon from '../assets/heartIcon.png';
 import backArrrow from '../assets/backArrowIcon.png';
 import youreAllSet from '../assets/youreAllSet.png';
@@ -82,7 +82,6 @@ type Dater = {
   bio: string;
   compatibility: number;
   vibe: string;
-  image: string;
   interests: string[];
   dateBudget: string;
   dateVibe: string[];
@@ -606,7 +605,6 @@ const profileToDater = (profileEntry: UserProfile): Dater => {
       'New connection at UF',
     compatibility: 0,
     vibe: topVibe,
-    image: getProfilePhotoUrl(profileEntry),
     interests: profileEntry.interests,
     dateBudget: profileEntry.dateBudget,
     dateVibe: profileEntry.dateVibe,
@@ -844,11 +842,6 @@ const buildPlannerPrompts = (profile: UserProfile | null, selectedMatch: Dater |
       prompt: `Give me 3 affordable Gainesville date ideas for ${matchName} this week that feel thoughtful, not boring.`,
     },
     {
-      id: 'outdoors',
-      label: 'Outside plan',
-      prompt: `Suggest an outdoor date in Gainesville for ${matchName}, with a backup option in case it rains.`,
-    },
-    {
       id: 'personalized',
       label: 'Match my vibe',
       prompt: sharedInterestSummary
@@ -901,13 +894,13 @@ const buildPlannerRequest = (
     describeMatchForPlanner(selectedMatch),
     currentProfile
       ? `Current user preferences:\n${[
-          currentProfile.interests.length ? `Interests: ${currentProfile.interests.join(', ')}` : '',
-          currentProfile.dateVibe.length ? `Preferred date vibes: ${currentProfile.dateVibe.join(', ')}` : '',
-          currentProfile.availability.length ? `Availability: ${currentProfile.availability.join(', ')}` : '',
-          currentProfile.dateBudget ? `Budget comfort: ${currentProfile.dateBudget}` : '',
-        ]
-          .filter(Boolean)
-          .join('\n')}`
+        currentProfile.interests.length ? `Interests: ${currentProfile.interests.join(', ')}` : '',
+        currentProfile.dateVibe.length ? `Preferred date vibes: ${currentProfile.dateVibe.join(', ')}` : '',
+        currentProfile.availability.length ? `Availability: ${currentProfile.availability.join(', ')}` : '',
+        currentProfile.dateBudget ? `Budget comfort: ${currentProfile.dateBudget}` : '',
+      ]
+        .filter(Boolean)
+        .join('\n')}`
       : '',
     sharedInterests.length ? `Shared interests: ${sharedInterests.join(', ')}` : 'Shared interests: not obvious yet',
     sharedVibes.length ? `Shared date vibes: ${sharedVibes.join(', ')}` : 'Shared date vibes: not obvious yet',
@@ -1097,8 +1090,8 @@ export default function App() {
     void loadDiscoveryFeed(currentUser, profile).catch((loadError: unknown) => {
       const code =
         typeof loadError === 'object' &&
-        loadError !== null &&
-        'code' in loadError
+          loadError !== null &&
+          'code' in loadError
           ? String((loadError as { code?: unknown }).code)
           : 'unknown';
       const message =
@@ -1177,8 +1170,8 @@ export default function App() {
       return;
     }
 
-    let unsubscribeMessages = () => {};
-    let unsubscribeConversation = () => {};
+    let unsubscribeMessages = () => { };
+    let unsubscribeConversation = () => { };
     let cancelled = false;
 
     void (async () => {
@@ -2363,8 +2356,8 @@ export default function App() {
     } catch (readError) {
       const code =
         typeof readError === 'object' &&
-        readError !== null &&
-        'code' in readError
+          readError !== null &&
+          'code' in readError
           ? String((readError as { code?: unknown }).code)
           : 'unknown';
       const message =
@@ -2416,8 +2409,8 @@ export default function App() {
     } catch (conversationReadError) {
       const code =
         typeof conversationReadError === 'object' &&
-        conversationReadError !== null &&
-        'code' in conversationReadError
+          conversationReadError !== null &&
+          'code' in conversationReadError
           ? String((conversationReadError as { code?: unknown }).code)
           : 'unknown';
       const message =
@@ -2500,8 +2493,8 @@ export default function App() {
     } catch (sendError) {
       const code =
         typeof sendError === 'object' &&
-        sendError !== null &&
-        'code' in sendError
+          sendError !== null &&
+          'code' in sendError
           ? String((sendError as { code?: unknown }).code)
           : 'unknown';
       const errorMessage =
@@ -2545,8 +2538,8 @@ export default function App() {
     } catch (retryError) {
       const code =
         typeof retryError === 'object' &&
-        retryError !== null &&
-        'code' in retryError
+          retryError !== null &&
+          'code' in retryError
           ? String((retryError as { code?: unknown }).code)
           : 'unknown';
       const errorMessage =
@@ -2639,10 +2632,10 @@ export default function App() {
         <>
           <section className="calendar">
             <h2>Calendar</h2>
-            
+
             <div>
-               {/* className="calendar-grid"> */}
-               <Calendar onChange={setCalendarValue} value={calendarValue}/>
+              {/* className="calendar-grid"> */}
+              <Calendar onChange={setCalendarValue} value={calendarValue} />
             </div>
           </section>
 
@@ -2650,7 +2643,7 @@ export default function App() {
             {plansForSelectedDay.length ? (
               plansForSelectedDay.map((plan) => (
                 <article key={plan.id} className="home-tile">
-                  <h3>{plan.title}</h3>
+                  <h3 style={{ textDecoration: 'underline' }}>{plan.title}</h3>
                   <p>{plan.place}</p>
                   <p>With {plan.matchName} on {formatCalendarEntryLabel(plan.date)}</p>
                   <p>{plan.description}</p>
@@ -2675,9 +2668,6 @@ export default function App() {
 
       return (
         <>
-          <p className="account-detail">
-            Pick a match, then describe the kind of date you want and get Gainesville-friendly suggestions tailored to both of you.
-          </p>
           {!isGeminiConfigured ? (
             <p className="planner-helper-text">
               Add <code>VITE_GEMINI_API_KEY</code> to <code>gator-dater-app/.env</code> to enable the chatbot.
@@ -2685,7 +2675,7 @@ export default function App() {
           ) : null}
           {!matchedDaters.length ? (
             <p className="planner-helper-text">
-              Match with someone first, then the planner can suggest dates around that person&apos;s vibe and preferences.
+              Match with someone first to plan a date together!
             </p>
           ) : (
             <section className="home-tile">
@@ -2701,15 +2691,10 @@ export default function App() {
               >
                 {matchedDaters.map((dater) => (
                   <option key={dater.id} value={dater.id}>
-                    {dater.name} · {dater.vibe}
+                    {dater.name}
                   </option>
                 ))}
               </select>
-              {selectedPlannerMatch ? (
-                <p className="planner-helper-text">
-                  Planning for {selectedPlannerMatch.name}: {selectedPlannerMatch.bio}
-                </p>
-              ) : null}
             </section>
           )}
 
@@ -2775,9 +2760,9 @@ export default function App() {
                                     setPendingCalendarSave((current) =>
                                       current
                                         ? {
-                                            ...current,
-                                            date: event.target.value,
-                                          }
+                                          ...current,
+                                          date: event.target.value,
+                                        }
                                         : current,
                                     )
                                   }
@@ -2814,7 +2799,7 @@ export default function App() {
             <form className="chat-input" onSubmit={handlePlannerSubmit}>
               <input
                 type="text"
-                placeholder={matchedDaters.length ? 'Ask for date ideas for this match...' : 'Match with someone to unlock the planner...'}
+                placeholder={matchedDaters.length ? 'Ask for date ideas for this match...' : 'Match with someone first!'}
                 value={plannerInput}
                 onChange={(event) => setPlannerInput(event.target.value)}
                 disabled={!isGeminiConfigured || plannerLoading || !matchedDaters.length}
@@ -2863,7 +2848,7 @@ export default function App() {
                       className="profile-circle-mini profile-circle-mini-image"
                     />
                   ) : (
-                    <div className="profile-circle-mini" style={{ backgroundImage: `url(${dater.image || gatorImg})` }} />
+                    <div className="profile-circle-mini" />
                   )}
                   <div className="chat-text-meta">
                     <h3 className="chat-name">{dater.name}</h3>
@@ -2879,7 +2864,7 @@ export default function App() {
       }
 
       return (
-        <section className="chat">
+        <section className="chat no-scroll">
           <div className="chat-thread-top">
             <button className="chat-back-link" type="button" onClick={() => {
               setChatError('');
@@ -3033,24 +3018,21 @@ export default function App() {
       <>
         <section className="swipe-stack">
           {currentDater ? (
-            <article className="swipe-card">
-              <img className="swipe-card-image" src={currentDater.image || gatorImg} alt={currentDater.name} />
-              {currentDater.photoUrl ? (
-                <div className="swipe-photo-wrap">
-                  <img
-                    src={currentDater.photoUrl}
-                    alt={`${currentDater.name} profile`}
-                    className="swipe-photo"
-                  />
-                </div>
-              ) : null}
-              <p>{currentDater.compatibility}% match</p>
-              <h2>
-                {currentDater.name}, {currentDater.age}
-              </h2>
-              <p>{currentDater.yearAtUf}</p>
-              <p className="swipe-vibe">{currentDater.vibe}</p>
-              <p>{currentDater.bio}</p>
+            <article
+              className="swipe-card"
+              style={{
+                backgroundImage: `url(${currentDater.photoUrl})`,
+              }}
+            >
+              <div className="swipe-overlay">
+                <p>{currentDater.compatibility}% match</p>
+                <h2>
+                  {currentDater.name}, {currentDater.age}
+                </h2>
+                <p>{currentDater.yearAtUf}</p>
+                <p className="swipe-vibe">{currentDater.vibe}</p>
+                <p>{currentDater.bio}</p>
+              </div>
             </article>
           ) : (
             <article className="swipe-card done-card">
@@ -3113,9 +3095,9 @@ export default function App() {
             : profile.matches || [];
           const nextConversations = matchedBack
             ? {
-                ...(profile.conversations || {}),
-                [currentDater.id]: conversationId,
-              }
+              ...(profile.conversations || {}),
+              [currentDater.id]: conversationId,
+            }
             : (profile.conversations || {});
 
           const likedUserMatches = matchedBack && likedUserProfile
@@ -3123,9 +3105,9 @@ export default function App() {
             : likedUserProfile?.matches || [];
           const likedUserConversations = matchedBack && likedUserProfile
             ? {
-                ...(likedUserProfile.conversations || {}),
-                [currentUser.uid]: conversationId,
-              }
+              ...(likedUserProfile.conversations || {}),
+              [currentUser.uid]: conversationId,
+            }
             : (likedUserProfile?.conversations || {});
 
           if (matchedBack && currentUserRef && likedUserSnap.exists()) {
@@ -3393,7 +3375,7 @@ export default function App() {
 
   if (screen === 'profile') {
     return renderFrame(
-      <div className="screen info-screen">
+      <div className="screen info-screen pref">
         <button className="back-button" onClick={handleBack} type="button">
           <img src={backArrrow} alt="Back Arrow" />
         </button>
@@ -3790,7 +3772,7 @@ export default function App() {
       <div className="screen info-screen">
         <img src={youreAllSetImg} alt="You're All Set!" />
         <img src={gatorImg} className="gator-set" alt="Gator" />
-        <div style={{ height: '15cqh' }} />
+        <div style={{ height: '18cqh' }} />
         <button className="primary-button all-set-continue" type="button" onClick={handleContinueFromAllSet}>
           Continue
         </button>
@@ -3823,7 +3805,6 @@ export default function App() {
               <div className="likes-list">
                 {likedDaters.map((dater) => (
                   <article key={dater.id} className="liked-card">
-                    <img className="liked-card-image" src={dater.image || gatorImg} alt={dater.name} />
                     {dater.photoUrl ? (
                       <div className="profile-photo-wrap">
                         <img
@@ -3864,7 +3845,6 @@ export default function App() {
               <div className="likes-list">
                 {matchedDaters.map((dater) => (
                   <article key={dater.id} className="liked-card">
-                    <img className="liked-card-image" src={dater.image || gatorImg} alt={dater.name} />
                     {dater.photoUrl ? (
                       <div className="profile-photo-wrap">
                         <img
@@ -3899,22 +3879,24 @@ export default function App() {
         <div className={`active-indicator pos-${activeTab}`} />
 
         <div className="icons-wrapper">
-          <button
-            className={activeTab === 'calendar' ? 'tab-button active' : 'tab-button'}
-            onClick={() => setActiveTab('calendar')}
-          >
-            <span className="tab-icon">
-              <img src={calenderImg} alt="Calendar" />
-            </span>
-          </button>
-          <button
-            className={activeTab === 'planner' ? 'tab-button active' : 'tab-button'}
-            onClick={() => setActiveTab('planner')}
-          >
-            <span className="tab-icon">
-              <img src={writeImg} alt="Write" />
-            </span>
-          </button>
+          <div className="icons-wrapper-extra">
+            <button
+              className={activeTab === 'calendar' ? 'tab-button active' : 'tab-button'}
+              onClick={() => setActiveTab('calendar')}
+            >
+              <span className="tab-icon">
+                <img src={calenderImg} alt="Calendar" />
+              </span>
+            </button>
+            <button
+              className={activeTab === 'planner' ? 'tab-button active' : 'tab-button'}
+              onClick={() => setActiveTab('planner')}
+            >
+              <span className="tab-icon">
+                <img src={writeImg} alt="Write" />
+              </span>
+            </button>
+          </div>
           <button
             className={activeTab === 'swipe' ? 'tab-button active' : 'tab-button'}
             onClick={() => setActiveTab('swipe')}
@@ -3923,22 +3905,24 @@ export default function App() {
               <img src={heartNavImg} alt="Like" />
             </span>
           </button>
-          <button
-            className={activeTab === 'chats' ? 'tab-button active' : 'tab-button'}
-            onClick={() => setActiveTab('chats')}
-          >
-            <span className="tab-icon">
-              <img src={chatImg} alt="Chats" />
-            </span>
-          </button>
-          <button
-            className={activeTab === 'profile-tab' ? 'tab-button active' : 'tab-button'}
-            onClick={() => setActiveTab('profile-tab')}
-          >
-            <span className="tab-icon">
-              <img src={userImg} alt="Profile" />
-            </span>
-          </button>
+          <div className="icons-wrapper-extra">
+            <button
+              className={activeTab === 'chats' ? 'tab-button active' : 'tab-button'}
+              onClick={() => setActiveTab('chats')}
+            >
+              <span className="tab-icon">
+                <img src={chatImg} alt="Chats" />
+              </span>
+            </button>
+            <button
+              className={activeTab === 'profile-tab' ? 'tab-button active' : 'tab-button'}
+              onClick={() => setActiveTab('profile-tab')}
+            >
+              <span className="tab-icon">
+                <img src={userImg} alt="Profile" />
+              </span>
+            </button>
+          </div>
         </div>
       </nav>
 

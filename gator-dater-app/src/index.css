@@ -1,3 +1,5 @@
+@import "tailwindcss";
+
 @import url('https://fonts.googleapis.com/css2?family=Yellowtail:ital,wght@0,400&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=Zilla+Slab:ital,wght@0,400&display=swap');
 
@@ -115,15 +117,15 @@ code {
 }
 
 .screen {
-  flex: 1;
-  width: 100%;
-  height: 100%;
-  overflow-y: auto;
-}
-
-.screen {
   display: flex;
   flex-direction: column;
+  height: 100%;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.lock-scroll {
+  overflow: hidden !important;
 }
 
 .intro-screen {
@@ -144,7 +146,15 @@ code {
   text-align: center;
   padding: 10cqw;
   gap: 2.93cqh;
-  overflow: hidden;
+  position: relative;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.info-screen.pref {
+  justify-content: flex-start;
+  align-items: stretch;
+  text-align: left;
 }
 
 .preferences-screen {
@@ -244,6 +254,16 @@ p, label, input {
   padding: 8px;
 }
 
+.react-calendar__tile {
+  background: #fff !important;
+  color: var(--color-blackPink) !important;
+}
+
+.react-calendar__tile--now {
+  background: var(--color-pink) !important;
+  color: var(--color-blackPink) !important;
+}
+
 .react-calendar__month-view__days__day--weekend {
   color: #d10000;
 }
@@ -322,7 +342,8 @@ button:active {
 
 .auth-form input::placeholder,
 .auth-form select::placeholder,
-.auth-form textarea::placeholder {
+.auth-form textarea::placeholder,
+.chat input::placeholder {
   color: var(--color-lightPink);
 }
 
@@ -350,7 +371,6 @@ button:active {
 }
 
 .auth-form select {
-  height: 18.83cqw;
   width: min(313px, 100%);
   padding: 0 3.25cqw;
   border-radius: 2.54cqw;
@@ -360,7 +380,6 @@ button:active {
   
   text-align: left;
   display: block;
-  line-height: 18.83cqw;
 
   font-family: 'Zilla Slab', serif;
   font-size: 4.1cqw;
@@ -481,32 +500,32 @@ button:active {
   position: absolute;
   width: 175cqw;
   height: auto;
-  top: 18cqh;
+  top: 15cqh;
   left: 32cqw;
   object-fit: contain;
-  opacity: 0.5;
+  opacity: 0.6;
 }
 
 .gator-2 {
   position: absolute;
   width: 200cqw;
   height: auto;
-  top: 45cqh;
+  top: 42cqh;
   right: 32cqw;
   transform: scaleX(-1);
   transform-origin: center;
   object-fit: contain;
-  opacity: 0.5;
+  opacity: 0.6;
 }
 
 .gator-set {
   position: absolute;
   width: 220cqw;
   height: auto;
-  top: 37cqh;
+  top: 36cqh;
   left: 32cqw;
   object-fit: contain;
-  opacity: 0.5;
+  opacity: 0.8;
   pointer-events: none;
   z-index: 0;
 }
@@ -520,8 +539,8 @@ button:active {
   position: absolute;
   width: 15cqw;
   height: auto;
-  top: 50cqh;
-  left: 45cqw;
+  top: 46.5cqh;
+  left: 43cqw;
   z-index: 1;
 }
 
@@ -619,10 +638,15 @@ hr {
 
 .home-tile,
 .notice {
+  display: flex;
+  flex-direction: column;
+  gap: 1cqh;
+
   padding: 3cqw;
   border: 1px solid var(--color-green);
   border-radius: 16px;
   background: var(--color-lightGreen);
+  width: 100%;
 }
 
 .chat-match-row {
@@ -637,6 +661,7 @@ hr {
   outline: 1px solid var(--color-lightPink);
   background: white;
   min-width: 0;
+  cursor: pointer;
 }
 
 .chat-match-button {
@@ -719,6 +744,7 @@ hr {
 .home-tile h3, 
 .home-tile p {
   color: black !important;
+  line-height: 1;
 }
 
 .prompt-grid {
@@ -749,6 +775,8 @@ hr {
   justify-content: space-between;
   height: 100%;
   gap: 1cqh;
+  flex: 1;
+  min-height: 0;
 }
 
 .chat-thread-top {
@@ -799,13 +827,12 @@ hr {
   flex-direction: column;
   gap: 1cqh;
   flex: 1;
-  overflow-y: auto;
+  min-height: 0;
+  overflow-y: auto; 
   padding-right: 1cqw;
 }
 
 .planner-chat-section {
-  min-height: 32cqh;
-  max-height: 40cqh;
   overflow-y: auto;
   padding-right: 0.75cqw;
 }
@@ -881,6 +908,7 @@ hr {
   margin-top: 0.4cqh;
   font-size: 3cqw;
   color: #6a5f66;
+  font-family: 'Zilla Slab', serif;
 }
 
 .chat-retry-button {
@@ -959,7 +987,8 @@ input:focus {
 .intro-profile-panel h1 {
   font-family: 'Yellowtail', cursive;
   font-size: 16cqw;
-  line-height: 0.7;
+  line-height: 1;
+  text-align: center;
 }
 
 .profile-tile {
@@ -998,7 +1027,7 @@ input:focus {
   height: 8.5cqw;
   border: none;
   border-radius: 9999px;
-  background: var(--color-pink);
+  background: var(--color-lightPink) !important;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1102,16 +1131,6 @@ input:focus {
   line-height: 1.2;
 }
 
-.liked-card-image,
-.swipe-card-image {
-  width: 100%;
-  aspect-ratio: 1 / 1;
-  object-fit: cover;
-  border-radius: 18px;
-  margin-bottom: 1cqh;
-  background: #f2f2f2;
-}
-
 .liked-profile-photo {
   width: 20cqw;
   height: 20cqw;
@@ -1146,42 +1165,57 @@ input:focus {
   display: flex;
   flex-direction: column;
   width: 100%;
-  margin-top: 1cqh;
   min-height: 0; 
 }
 
 .swipe-card {
-  background: linear-gradient(180deg, #ffffff 0%, #f4f4f4 100%);
-  border: 1px solid var(--color-darkPink);
-  
-  padding: 1.25rem;
-  border-radius: 24px;
+  position: relative;
   width: 100%;
   height: 100%;
-  
+  border-radius: 24px;
+  overflow: hidden;
+  background-size: cover;
+  background-position: center;
+  background-color: var(--color-whitePink);
   display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.08);
+  align-items: flex-end;
 }
 
-.swipe-photo-wrap {
-  display: flex;
-  justify-content: center;
-  margin-bottom: 1rem;
+.swipe-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+
+  background: linear-gradient(
+    to top,
+    rgba(255, 255, 255, 0.95) 0%,
+    rgba(255, 255, 255, 0.75) 20%,
+    rgba(255, 255, 255, 0.3) 45%,
+    rgba(255, 255, 255, 0) 65%
+  );
+
+  z-index: 1;
 }
 
-.swipe-photo {
+.swipe-overlay {
+  position: relative;
+  z-index: 2;
+  padding: 5cqw;
   width: 100%;
-  max-height: 34cqh;
-  object-fit: cover;
-  border-radius: 20px;
-  border: 2px solid var(--color-whitePink);
+
+  display: grid;
+  gap: 0.5cqh;
 }
+
+.swipe-overlay h2 {
+  line-height: 1;
+}
+
 
 .swipe-vibe {
   display: inline-flex;
   align-self: flex-start;
+  width: fit-content;
   padding: 0.65cqh 2.65cqw;
   border-radius: 999px;
   background: var(--color-lightBlue);
@@ -1189,7 +1223,12 @@ input:focus {
 }
 
 .done-card {
+  display: flex;
+  flex-direction: column;
   justify-content: center;
+  align-items: center;
+  text-align: center;
+  padding: 10cqw;
 }
 
 .swipe-actions {
@@ -1236,8 +1275,6 @@ button.Ellipse2 {
   align-items: center;
   justify-content: center;
   background: white;
-  --nav-width: 97cqw;
-  --tab-step: calc(var(--nav-width) / 5);
 }
 
 .nav-bg {
@@ -1253,51 +1290,43 @@ button.Ellipse2 {
 
 .active-indicator {
   position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 13.2cqw;
-  height: 13.2cqw;
+  width: 15cqw;
+  height: 15cqw;
   background: var(--color-whitePink);
   border-radius: 9999px;
   z-index: 2;
-  transform: translate(-50%, -50%);
-  transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.pos-calendar    { left: calc(50% - (2 * var(--tab-step))); }
-.pos-planner     { left: calc(50% - var(--tab-step) - 0.8cqw); }
-.pos-swipe       { left: 50%; }
-.pos-chats       { left: calc(50% + var(--tab-step) + 0.8cqw); }
-.pos-profile-tab { left: calc(50% + (2 * var(--tab-step))); }
+.pos-calendar    { transform: translateX(-261%); }
+.pos-planner     { transform: translateX(-147%); }
+.pos-swipe       { transform: translateX(0%);    }
+.pos-chats       { transform: translateX(147%);  }
+.pos-profile-tab { transform: translateX(261%);  }
 
 .icons-wrapper {
   position: relative;
   z-index: 3;
-  width: var(--nav-width);
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  align-items: center;
-  justify-items: center;
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  padding: 0 6cqw;
+}
+
+.icons-wrapper-extra {
+  display: flex;
+  gap: 8.5cqw;
 }
 
 .tab-button {
   background: transparent !important;
   border: none;
-  width: 100%;
-  height: 100%;
+  width: auto;
+  height: auto;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  padding: 0;
-}
-
-.icons-wrapper .tab-button:nth-child(2) .tab-icon {
-  transform: translateX(-0.8cqw);
-}
-
-.icons-wrapper .tab-button:nth-child(4) .tab-icon {
-  transform: translateX(0.8cqw);
 }
 
 .tab-icon {
