@@ -25,7 +25,7 @@ import {
   writeBatch,
 } from 'firebase/firestore';
 import { auth, db, isFirebaseConfigured } from './firebase';
-import gatorImage from '../assets/PLEASE REPLACE.png';
+import gatorImage from '../assets/gatorDatorLogo.png';
 import heartIcon from '../assets/heartIcon.png';
 import backArrrow from '../assets/backArrowIcon.png';
 import youreAllSet from '../assets/youreAllSet.png';
@@ -320,204 +320,204 @@ const interestOptions = [
   'Volunteering',
 ];
 
-const sampleDiscoveryProfiles: Array<Partial<UserProfile> & { uid: string }> = [
-  {
-    uid: 'sample-leah',
-    firstName: 'Leah',
-    lastName: 'Sample',
-    fullName: 'Leah Sample',
-    age: 21,
-    yearAtUf: 'Junior',
-    bio: 'Quiet reader who loves coffee shop hangs and movie nights.',
-    gender: 'woman',
-    intention: 'dating',
-    interests: ['Reading', 'Coffee shops', 'Photography', 'Film'],
-    dateVibe: ['Artsy', 'Chill'],
-    dateBudget: 'low',
-    preferences: {
-      intention: 'dating',
-      genderIdentity: 'woman',
-      genderPreference: 'men',
-      intentionOpenTo: 'dating',
-      ageRange: { min: 20, max: 25 },
-      vibeWords: ['Artsy', 'Planner', 'Curious'],
-      socialEnergy: 45,
-      dateBudget: 'low',
-      dateVibe: ['Artsy', 'Chill'],
-      distance: 'near',
-      availability: ['weekends'],
-      interests: ['Reading', 'Coffee shops', 'Photography', 'Film'],
-    },
-  },
-  {
-    uid: 'sample-ethan',
-    firstName: 'Ethan',
-    lastName: 'Sample',
-    fullName: 'Ethan Sample',
-    age: 20,
-    yearAtUf: 'Sophomore',
-    bio: 'Outgoing and social, always down to try a new spot in town.',
-    gender: 'man',
-    intention: 'dating',
-    interests: ['Concerts', 'Thrifting', 'Coffee shops', 'Travel'],
-    dateVibe: ['Foodie', 'Surprise me'],
-    dateBudget: 'mid',
-    preferences: {
-      intention: 'dating',
-      genderIdentity: 'man',
-      genderPreference: 'women',
-      intentionOpenTo: 'either',
-      ageRange: { min: 18, max: 24 },
-      vibeWords: ['Spontaneous', 'Social', 'Foodie'],
-      socialEnergy: 80,
-      dateBudget: 'mid',
-      dateVibe: ['Foodie', 'Surprise me'],
-      distance: 'anywhere',
-      availability: ['either'],
-      interests: ['Concerts', 'Thrifting', 'Coffee shops', 'Travel'],
-    },
-  },
-  {
-    uid: 'sample-jordan',
-    firstName: 'Jordan',
-    lastName: 'Sample',
-    fullName: 'Jordan Sample',
-    age: 22,
-    yearAtUf: 'Senior',
-    bio: 'Gym regular who likes active first dates and football weekends.',
-    gender: 'man',
-    intention: 'either',
-    interests: ['Gym', 'Football games', 'Pickleball', 'Hiking'],
-    dateVibe: ['Active'],
-    dateBudget: 'free',
-    preferences: {
-      intention: 'either',
-      genderIdentity: 'man',
-      genderPreference: 'women',
-      intentionOpenTo: 'either',
-      ageRange: { min: 19, max: 25 },
-      vibeWords: ['Athletic', 'Spontaneous', 'Adventurous'],
-      socialEnergy: 72,
-      dateBudget: 'free',
-      dateVibe: ['Active'],
-      distance: 'near',
-      availability: ['weekdays'],
-      interests: ['Gym', 'Football games', 'Pickleball', 'Hiking'],
-    },
-  },
-  {
-    uid: 'sample-dylan',
-    firstName: 'Dylan',
-    lastName: 'Sample',
-    fullName: 'Dylan Sample',
-    age: 21,
-    yearAtUf: 'Junior',
-    bio: 'Low-key gamer and foodie who likes good playlists and better conversation.',
-    gender: 'man',
-    intention: 'dating',
-    interests: ['Board games', 'Coffee shops', 'Trying new restaurants', 'Music', 'Gaming', 'Travel'],
-    dateVibe: ['Foodie', 'Surprise me', 'Chill'],
-    dateBudget: 'low',
-    preferences: {
-      intention: 'dating',
-      genderIdentity: 'man',
-      genderPreference: 'women',
-      intentionOpenTo: 'either',
-      ageRange: { min: 18, max: 25 },
-      vibeWords: ['Foodie', 'Night owl', 'Curious'],
-      socialEnergy: 30,
-      dateBudget: 'low',
-      dateVibe: ['Foodie', 'Surprise me', 'Chill'],
-      distance: 'anywhere',
-      availability: ['either'],
-      interests: ['Board games', 'Coffee shops', 'Trying new restaurants', 'Music', 'Gaming', 'Travel'],
-    },
-  },
-  {
-    uid: 'sample-noah',
-    firstName: 'Noah',
-    lastName: 'Sample',
-    fullName: 'Noah Sample',
-    age: 21,
-    yearAtUf: 'Junior',
-    bio: 'Creative and thoughtful, happiest with art, film, and chill weekends.',
-    gender: 'man',
-    intention: 'friendship',
-    interests: ['Painting', 'Film', 'Photography', 'Board games'],
-    dateVibe: ['Artsy'],
-    dateBudget: 'low',
-    preferences: {
-      intention: 'friendship',
-      genderIdentity: 'man',
-      genderPreference: 'everyone',
-      intentionOpenTo: 'friendship',
-      ageRange: { min: 20, max: 24 },
-      vibeWords: ['Artsy', 'Homebody', 'Planner'],
-      socialEnergy: 38,
-      dateBudget: 'low',
-      dateVibe: ['Artsy'],
-      distance: 'campus',
-      availability: ['weekends'],
-      interests: ['Painting', 'Film', 'Photography', 'Board games'],
-    },
-  },
-  {
-    uid: 'sample-nina',
-    firstName: 'Nina',
-    lastName: 'Sample',
-    fullName: 'Nina Sample',
-    age: 19,
-    yearAtUf: 'Freshman',
-    bio: 'Friendly and easygoing, into coffee runs, trivia nights, and games.',
-    gender: 'woman',
-    intention: 'either',
-    interests: ['Coffee shops', 'Reading', 'Gaming', 'Trivia nights'],
-    dateVibe: ['Chill', 'Foodie'],
-    dateBudget: 'low',
-    preferences: {
-      intention: 'either',
-      genderIdentity: 'woman',
-      genderPreference: 'everyone',
-      intentionOpenTo: 'either',
-      ageRange: { min: 18, max: 22 },
-      vibeWords: ['Curious', 'Early bird', 'Chill'],
-      socialEnergy: 55,
-      dateBudget: 'low',
-      dateVibe: ['Chill', 'Foodie'],
-      distance: 'campus',
-      availability: ['either'],
-      interests: ['Coffee shops', 'Reading', 'Gaming', 'Trivia nights'],
-    },
-  },
-  {
-    uid: 'sample-liam',
-    firstName: 'Liam',
-    lastName: 'Sample',
-    fullName: 'Liam Sample',
-    age: 23,
-    yearAtUf: 'Graduate',
-    bio: 'Planner with foodie energy who enjoys weekend adventures and live music.',
-    gender: 'man',
-    intention: 'dating',
-    interests: ['Trying new restaurants', 'Travel', 'Music', 'Cooking'],
-    dateVibe: ['Foodie', 'Surprise me'],
-    dateBudget: 'mid',
-    preferences: {
-      intention: 'dating',
-      genderIdentity: 'man',
-      genderPreference: 'women',
-      intentionOpenTo: 'dating',
-      ageRange: { min: 22, max: 28 },
-      vibeWords: ['Foodie', 'Planner', 'Night owl'],
-      socialEnergy: 67,
-      dateBudget: 'mid',
-      dateVibe: ['Foodie', 'Surprise me'],
-      distance: 'anywhere',
-      availability: ['weekends'],
-      interests: ['Trying new restaurants', 'Travel', 'Music', 'Cooking'],
-    },
-  },
-];
+// const sampleDiscoveryProfiles: Array<Partial<UserProfile> & { uid: string }> = [
+//   {
+//     uid: 'sample-leah',
+//     firstName: 'Leah',
+//     lastName: 'Sample',
+//     fullName: 'Leah Sample',
+//     age: 21,
+//     yearAtUf: 'Junior',
+//     bio: 'Quiet reader who loves coffee shop hangs and movie nights.',
+//     gender: 'woman',
+//     intention: 'dating',
+//     interests: ['Reading', 'Coffee shops', 'Photography', 'Film'],
+//     dateVibe: ['Artsy', 'Chill'],
+//     dateBudget: 'low',
+//     preferences: {
+//       intention: 'dating',
+//       genderIdentity: 'woman',
+//       genderPreference: 'men',
+//       intentionOpenTo: 'dating',
+//       ageRange: { min: 20, max: 25 },
+//       vibeWords: ['Artsy', 'Planner', 'Curious'],
+//       socialEnergy: 45,
+//       dateBudget: 'low',
+//       dateVibe: ['Artsy', 'Chill'],
+//       distance: 'near',
+//       availability: ['weekends'],
+//       interests: ['Reading', 'Coffee shops', 'Photography', 'Film'],
+//     },
+//   },
+//   {
+//     uid: 'sample-ethan',
+//     firstName: 'Ethan',
+//     lastName: 'Sample',
+//     fullName: 'Ethan Sample',
+//     age: 20,
+//     yearAtUf: 'Sophomore',
+//     bio: 'Outgoing and social, always down to try a new spot in town.',
+//     gender: 'man',
+//     intention: 'dating',
+//     interests: ['Concerts', 'Thrifting', 'Coffee shops', 'Travel'],
+//     dateVibe: ['Foodie', 'Surprise me'],
+//     dateBudget: 'mid',
+//     preferences: {
+//       intention: 'dating',
+//       genderIdentity: 'man',
+//       genderPreference: 'women',
+//       intentionOpenTo: 'either',
+//       ageRange: { min: 18, max: 24 },
+//       vibeWords: ['Spontaneous', 'Social', 'Foodie'],
+//       socialEnergy: 80,
+//       dateBudget: 'mid',
+//       dateVibe: ['Foodie', 'Surprise me'],
+//       distance: 'anywhere',
+//       availability: ['either'],
+//       interests: ['Concerts', 'Thrifting', 'Coffee shops', 'Travel'],
+//     },
+//   },
+//   {
+//     uid: 'sample-jordan',
+//     firstName: 'Jordan',
+//     lastName: 'Sample',
+//     fullName: 'Jordan Sample',
+//     age: 22,
+//     yearAtUf: 'Senior',
+//     bio: 'Gym regular who likes active first dates and football weekends.',
+//     gender: 'man',
+//     intention: 'either',
+//     interests: ['Gym', 'Football games', 'Pickleball', 'Hiking'],
+//     dateVibe: ['Active'],
+//     dateBudget: 'free',
+//     preferences: {
+//       intention: 'either',
+//       genderIdentity: 'man',
+//       genderPreference: 'women',
+//       intentionOpenTo: 'either',
+//       ageRange: { min: 19, max: 25 },
+//       vibeWords: ['Athletic', 'Spontaneous', 'Adventurous'],
+//       socialEnergy: 72,
+//       dateBudget: 'free',
+//       dateVibe: ['Active'],
+//       distance: 'near',
+//       availability: ['weekdays'],
+//       interests: ['Gym', 'Football games', 'Pickleball', 'Hiking'],
+//     },
+//   },
+//   {
+//     uid: 'sample-dylan',
+//     firstName: 'Dylan',
+//     lastName: 'Sample',
+//     fullName: 'Dylan Sample',
+//     age: 21,
+//     yearAtUf: 'Junior',
+//     bio: 'Low-key gamer and foodie who likes good playlists and better conversation.',
+//     gender: 'man',
+//     intention: 'dating',
+//     interests: ['Board games', 'Coffee shops', 'Trying new restaurants', 'Music', 'Gaming', 'Travel'],
+//     dateVibe: ['Foodie', 'Surprise me', 'Chill'],
+//     dateBudget: 'low',
+//     preferences: {
+//       intention: 'dating',
+//       genderIdentity: 'man',
+//       genderPreference: 'women',
+//       intentionOpenTo: 'either',
+//       ageRange: { min: 18, max: 25 },
+//       vibeWords: ['Foodie', 'Night owl', 'Curious'],
+//       socialEnergy: 30,
+//       dateBudget: 'low',
+//       dateVibe: ['Foodie', 'Surprise me', 'Chill'],
+//       distance: 'anywhere',
+//       availability: ['either'],
+//       interests: ['Board games', 'Coffee shops', 'Trying new restaurants', 'Music', 'Gaming', 'Travel'],
+//     },
+//   },
+//   {
+//     uid: 'sample-noah',
+//     firstName: 'Noah',
+//     lastName: 'Sample',
+//     fullName: 'Noah Sample',
+//     age: 21,
+//     yearAtUf: 'Junior',
+//     bio: 'Creative and thoughtful, happiest with art, film, and chill weekends.',
+//     gender: 'man',
+//     intention: 'friendship',
+//     interests: ['Painting', 'Film', 'Photography', 'Board games'],
+//     dateVibe: ['Artsy'],
+//     dateBudget: 'low',
+//     preferences: {
+//       intention: 'friendship',
+//       genderIdentity: 'man',
+//       genderPreference: 'everyone',
+//       intentionOpenTo: 'friendship',
+//       ageRange: { min: 20, max: 24 },
+//       vibeWords: ['Artsy', 'Homebody', 'Planner'],
+//       socialEnergy: 38,
+//       dateBudget: 'low',
+//       dateVibe: ['Artsy'],
+//       distance: 'campus',
+//       availability: ['weekends'],
+//       interests: ['Painting', 'Film', 'Photography', 'Board games'],
+//     },
+//   },
+//   {
+//     uid: 'sample-nina',
+//     firstName: 'Nina',
+//     lastName: 'Sample',
+//     fullName: 'Nina Sample',
+//     age: 19,
+//     yearAtUf: 'Freshman',
+//     bio: 'Friendly and easygoing, into coffee runs, trivia nights, and games.',
+//     gender: 'woman',
+//     intention: 'either',
+//     interests: ['Coffee shops', 'Reading', 'Gaming', 'Trivia nights'],
+//     dateVibe: ['Chill', 'Foodie'],
+//     dateBudget: 'low',
+//     preferences: {
+//       intention: 'either',
+//       genderIdentity: 'woman',
+//       genderPreference: 'everyone',
+//       intentionOpenTo: 'either',
+//       ageRange: { min: 18, max: 22 },
+//       vibeWords: ['Curious', 'Early bird', 'Chill'],
+//       socialEnergy: 55,
+//       dateBudget: 'low',
+//       dateVibe: ['Chill', 'Foodie'],
+//       distance: 'campus',
+//       availability: ['either'],
+//       interests: ['Coffee shops', 'Reading', 'Gaming', 'Trivia nights'],
+//     },
+//   },
+//   {
+//     uid: 'sample-liam',
+//     firstName: 'Liam',
+//     lastName: 'Sample',
+//     fullName: 'Liam Sample',
+//     age: 23,
+//     yearAtUf: 'Graduate',
+//     bio: 'Planner with foodie energy who enjoys weekend adventures and live music.',
+//     gender: 'man',
+//     intention: 'dating',
+//     interests: ['Trying new restaurants', 'Travel', 'Music', 'Cooking'],
+//     dateVibe: ['Foodie', 'Surprise me'],
+//     dateBudget: 'mid',
+//     preferences: {
+//       intention: 'dating',
+//       genderIdentity: 'man',
+//       genderPreference: 'women',
+//       intentionOpenTo: 'dating',
+//       ageRange: { min: 22, max: 28 },
+//       vibeWords: ['Foodie', 'Planner', 'Night owl'],
+//       socialEnergy: 67,
+//       dateBudget: 'mid',
+//       dateVibe: ['Foodie', 'Surprise me'],
+//       distance: 'anywhere',
+//       availability: ['weekends'],
+//       interests: ['Trying new restaurants', 'Travel', 'Music', 'Cooking'],
+//     },
+//   },
+// ];
 
 const normalizeEmail = (email: string) => email.trim().toLowerCase();
 const isUflEmail = (email: string) => normalizeEmail(email).endsWith('@ufl.edu');
@@ -599,6 +599,17 @@ const isIntentionCompatible = (seekerIntention: string, candidateIntention: stri
 };
 const labelForIntention = (value: string) =>
   datingIntentionOptions.find((option) => option.value === value)?.label || 'Open to anything';
+const getProfilePhotoUrl = (profile: Partial<UserProfile> & Record<string, unknown>) => {
+  const candidateKeys = [
+    profile.photoUrl,
+    typeof profile.photoURL === 'string' ? profile.photoURL : '',
+    typeof profile.imageUrl === 'string' ? profile.imageUrl : '',
+    typeof profile.avatarUrl === 'string' ? profile.avatarUrl : '',
+    typeof profile.profilePhotoUrl === 'string' ? profile.profilePhotoUrl : '',
+  ];
+
+  return candidateKeys.find((value) => typeof value === 'string' && value.trim()) || '';
+};
 const profileToDater = (profileEntry: UserProfile): Dater => {
   const topVibe = profileEntry.preferences.vibeWords[0] || profileEntry.dateVibe[0] || 'Good energy';
   const interestSummary = profileEntry.preferences.interests.slice(0, 3).join(', ');
@@ -681,7 +692,7 @@ const normalizeUserProfile = (rawProfile: Partial<UserProfile>, uid: string): Us
     distance: rawProfile.distance || preferences.distance,
     availability: Array.isArray(rawProfile.availability) ? rawProfile.availability : preferences.availability,
     email: rawProfile.email || '',
-    photoUrl: rawProfile.photoUrl || '',
+    photoUrl: getProfilePhotoUrl(rawProfile),
     preferences,
     likedUsers: Array.isArray(rawProfile.likedUsers) ? rawProfile.likedUsers : [],
     passedUsers: Array.isArray(rawProfile.passedUsers) ? rawProfile.passedUsers : [],
@@ -717,30 +728,7 @@ const compareProfilesByPreferences = (current: UserProfile, candidate: UserProfi
 
   return Math.min(score, 100);
 };
-const buildSampleDiscoveryFeed = (currentProfile?: UserProfile) => {
-  const normalizedSamples = sampleDiscoveryProfiles
-    .map((sampleProfile) => normalizeUserProfile(sampleProfile, sampleProfile.uid));
-
-  if (!currentProfile) {
-    return normalizedSamples.map((sampleProfile) => ({
-      ...profileToDater(sampleProfile),
-      compatibility: 0,
-    }));
-  }
-
-  return normalizedSamples
-    .filter((sampleProfile) => !currentProfile.likedUsers.includes(sampleProfile.uid))
-    .filter((sampleProfile) => !currentProfile.passedUsers.includes(sampleProfile.uid))
-    .map((sampleProfile) => ({
-      sampleProfile,
-      score: compareProfilesByPreferences(currentProfile, sampleProfile),
-    }))
-    .sort((left, right) => right.score - left.score)
-    .map(({ sampleProfile, score }) => ({
-      ...profileToDater(sampleProfile),
-      compatibility: score,
-    }));
-};
+// const buildSampleDiscoveryFeed = (_currentProfile?: UserProfile) => [] as Dater[];
 const isOfflineFirestoreError = (value: unknown) =>
   value instanceof Error &&
   (value.message.toLowerCase().includes('client is offline') ||
@@ -759,6 +747,7 @@ const buildFirestoreUserProfile = (nextProfile: UserProfile) => ({
   bio: nextProfile.bio,
   email: nextProfile.email,
   photoUrl: nextProfile.photoUrl,
+  photoURL: nextProfile.photoUrl,
   preferences: nextProfile.preferences,
   likedUsers: nextProfile.likedUsers,
   passedUsers: nextProfile.passedUsers,
@@ -881,11 +870,6 @@ const buildPlannerPrompts = (profile: UserProfile | null, selectedMatch: Dater |
       id: 'budget',
       label: 'Budget-friendly night',
       prompt: `Give me 3 affordable Gainesville date ideas for ${matchName} this week that feel thoughtful, not boring.`,
-    },
-    {
-      id: 'outdoors',
-      label: 'Outside plan',
-      prompt: `Suggest an outdoor date in Gainesville for ${matchName}, with a backup option in case it rains.`,
     },
     {
       id: 'personalized',
@@ -1035,7 +1019,7 @@ export default function App() {
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatError, setChatError] = useState('');
   const [conversationReadBy, setConversationReadBy] = useState<Record<string, number>>({});
-  const [discoveryFeed, setDiscoveryFeed] = useState<Dater[]>(() => buildSampleDiscoveryFeed());
+  const [discoveryFeed, setDiscoveryFeed] = useState<Dater[]>([]);
   const [discoveryFeedSource, setDiscoveryFeedSource] = useState<'sample' | 'firestore'>('sample');
   const [preferencesSection, setPreferencesSection] = useState<'preferences' | 'deal-breakers'>('preferences');
   const [plannerMessages, setPlannerMessages] = useState<PlannerChatMessage[]>([
@@ -1136,6 +1120,43 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (!db || !currentUser) {
+      return;
+    }
+
+    const userRef = doc(db, 'users', currentUser.uid);
+
+    return onSnapshot(
+      userRef,
+      (snapshot) => {
+        if (!snapshot.exists()) {
+          return;
+        }
+
+        const liveProfile = normalizeUserProfile(
+          snapshot.data() as Partial<UserProfile>,
+          currentUser.uid,
+        );
+
+        setFirestoreHealth('connected');
+        saveLocalProfile(currentUser.uid, liveProfile);
+        setProfile((current) => {
+          if (!current) {
+            return liveProfile;
+          }
+
+          return JSON.stringify(current) === JSON.stringify(liveProfile)
+            ? current
+            : liveProfile;
+        });
+      },
+      () => {
+        setFirestoreHealth('fallback');
+      },
+    );
+  }, [currentUser]);
+
+  useEffect(() => {
     if (!currentUser || !profile || screen !== 'home') {
       return;
     }
@@ -1152,8 +1173,8 @@ export default function App() {
           ? loadError.message
           : 'unknown error';
 
-      setDiscoveryFeed(buildSampleDiscoveryFeed(profile));
-      setDiscoveryFeedSource('sample');
+      setDiscoveryFeed([]);
+      setDiscoveryFeedSource('firestore');
       //for firebase accounts info
       // setDiscoveryDebug(
       //   `DEBUG discovery: Firestore load failed (code=${code}, message=${message}); showing sample profiles only.`,
@@ -1162,7 +1183,7 @@ export default function App() {
         setFirestoreHealth('fallback');
       }
       setSwipeIndex(0);
-      setStatus('Using sample daters while the discovery feed loads.');
+      setStatus('Using fallback daters while the discovery feed loads.');
     });
   }, [currentUser, profile, screen]);
 
@@ -2234,20 +2255,44 @@ export default function App() {
   };
 
   const handleContinueFromAllSet = () => {
-    if (currentUser && profile) {
-      void findTopPreferenceMatches(currentUser.uid, profile)
-        .then((matches) => {
-          if (matches.length) {
-            setStatus(`Found ${matches.length} potential matches from profile preferences.`);
-          }
-        })
-        .catch(() => {
-          setStatus('');
-        });
-    }
-
     setScreen('home');
     setActiveTab('swipe');
+
+    if (!currentUser || !profile) {
+      return;
+    }
+
+    const nextProfile = profile.onboardingCompleted
+      ? profile
+      : {
+          ...profile,
+          onboardingCompleted: true,
+        };
+
+    if (!profile.onboardingCompleted) {
+      setProfile(nextProfile);
+      saveLocalProfile(currentUser.uid, nextProfile);
+
+      if (db) {
+        void setDoc(
+          doc(db, 'users', currentUser.uid),
+          { onboardingCompleted: true },
+          { merge: true },
+        ).catch(() => {
+          setFirestoreHealth('fallback');
+        });
+      }
+    }
+
+    void findTopPreferenceMatches(currentUser.uid, nextProfile)
+      .then((matches) => {
+        if (matches.length) {
+          setStatus(`Found ${matches.length} potential matches from profile preferences.`);
+        }
+      })
+      .catch(() => {
+        setStatus('');
+      });
   };
 
   const handleOpenPreferences = () => {
@@ -2431,8 +2476,8 @@ export default function App() {
 
   const loadDiscoveryFeed = async (currentUserEntry: User, currentProfile: UserProfile) => {
     if (!db) {
-      setDiscoveryFeed(buildSampleDiscoveryFeed(currentProfile));
-      setDiscoveryFeedSource('sample');
+      setDiscoveryFeed([]);
+      setDiscoveryFeedSource('firestore');
       //for firebase accounts info
       // setDiscoveryDebug('DEBUG discovery: Firestore not configured; showing sample profiles only.');
       setSwipeIndex(0);
@@ -2468,8 +2513,7 @@ export default function App() {
         compatibility: score,
       }));
 
-    const sampleCandidates = buildSampleDiscoveryFeed(currentProfile)
-      .filter((sampleCandidate) => !remoteCandidates.some((remoteCandidate) => remoteCandidate.id === sampleCandidate.id));
+    // const sampleCandidates: Dater[] = [];
 
     //for firebase accounts info
     // setDiscoveryDebug(
@@ -2477,14 +2521,14 @@ export default function App() {
     // );
 
     if (remoteCandidates.length) {
-      setDiscoveryFeed([...remoteCandidates, ...sampleCandidates]);
+      setDiscoveryFeed(remoteCandidates);
       setDiscoveryFeedSource('firestore');
       setSwipeIndex(0);
       return;
     }
 
-    setDiscoveryFeed(buildSampleDiscoveryFeed(currentProfile));
-    setDiscoveryFeedSource('sample');
+    setDiscoveryFeed([]);
+    setDiscoveryFeedSource('firestore');
     //for firebase accounts info
     // setDiscoveryDebug(
     //   `DEBUG discovery: firestoreDocs=${snapshot.docs.length} eligibleFirebase=${baseRemoteCandidates.length} firebaseShown=0; using sample fallback`,
@@ -2499,7 +2543,9 @@ export default function App() {
     }
 
     const firestore = db;
-    const candidateMatchIds = Array.from(new Set(profile.matches || []));
+    const candidateMatchIds = Array.from(
+      new Set([...(profile.matches || []), ...(profile.likedUsers || [])]),
+    );
 
     if (!candidateMatchIds.length) {
       setMatchedDaters([]);
@@ -2518,14 +2564,18 @@ export default function App() {
           matchDoc.data() as Partial<UserProfile>,
           matchId,
         );
-        const isMutualMatch = candidateProfile.matches.includes(currentUser.uid);
+        const isMutualLike = candidateProfile.likedUsers.includes(currentUser.uid);
+        const isMutualMatch = candidateProfile.matches.includes(currentUser.uid) || isMutualLike;
         const wasRecordedMatch = profile.matches.includes(matchId);
 
         if (!isMutualMatch && !wasRecordedMatch) {
           return null;
         }
 
-        return profileToDater(candidateProfile);
+        return {
+          ...profileToDater(candidateProfile),
+          compatibility: compareProfilesByPreferences(profile, candidateProfile),
+        };
       }),
     );
 
@@ -2562,15 +2612,14 @@ export default function App() {
       return;
     }
 
-    const sampleProfileMap = new Map(
-      sampleDiscoveryProfiles.map((sampleProfile) => [
-        sampleProfile.uid,
-        normalizeUserProfile(sampleProfile, sampleProfile.uid),
-      ]),
-    );
+    // const sampleProfileMap = new Map<string, UserProfile>();
 
     const likedCards = await Promise.all(
       currentProfile.likedUsers.map(async (likedUserId) => {
+        if (currentProfile.matches.includes(likedUserId)) {
+          return null;
+        }
+
         if (db) {
           try {
             const likedUserDoc = await getDoc(doc(db, 'users', likedUserId));
@@ -2580,6 +2629,11 @@ export default function App() {
                 likedUserDoc.data() as Partial<UserProfile>,
                 likedUserId,
               );
+
+              if (likedProfile.likedUsers.includes(currentProfile.uid)) {
+                return null;
+              }
+
               return {
                 ...profileToDater(likedProfile),
                 compatibility: compareProfilesByPreferences(currentProfile, likedProfile),
@@ -2588,15 +2642,6 @@ export default function App() {
           } catch {
             // Fall back to local sample profile map when Firestore fetch fails.
           }
-        }
-
-        const sampleFallback = sampleProfileMap.get(likedUserId);
-
-        if (sampleFallback) {
-          return {
-            ...profileToDater(sampleFallback),
-            compatibility: compareProfilesByPreferences(currentProfile, sampleFallback),
-          };
         }
 
         return null;
@@ -2961,13 +3006,9 @@ export default function App() {
           <section className="home-grid">
             {plansForSelectedDay.length ? (
               plansForSelectedDay.map((plan) => (
-                <button
-                  key={plan.id}
-                  className="home-tile calendar-plan-card"
-                  type="button"
-                  onClick={() => setSelectedCalendarPlan(plan)}
-                >
-                  <h3>{plan.title}</h3>
+                <article key={plan.id} className="home-tile">
+                  <h3 style={{ textDecoration: 'underline' }}>{plan.title}</h3>
+                  <p>{plan.place}</p>
                   <p>With {plan.matchName} on {formatCalendarEntryLabel(plan.date)}</p>
                 </button>
               ))
@@ -3037,9 +3078,6 @@ export default function App() {
 
       return (
         <>
-          <p className="account-detail">
-            Pick a match, then describe the kind of date you want and get Gainesville-friendly suggestions tailored to both of you.
-          </p>
           {!isGeminiConfigured ? (
             <p className="planner-helper-text">
               Add <code>VITE_GEMINI_API_KEY</code> to <code>gator-dater-app/.env</code> to enable the chatbot.
@@ -3063,15 +3101,10 @@ export default function App() {
               >
                 {matchedDaters.map((dater) => (
                   <option key={dater.id} value={dater.id}>
-                    {dater.name} · {dater.vibe}
+                    {dater.name}
                   </option>
                 ))}
               </select>
-              {selectedPlannerMatch ? (
-                <p className="planner-helper-text">
-                  Planning for {selectedPlannerMatch.name}: {selectedPlannerMatch.bio}
-                </p>
-              ) : null}
             </section>
           )}
 
@@ -3468,8 +3501,8 @@ export default function App() {
           ) : (
             <article className="swipe-card done-card">
               <p className="account-label">All caught up</p>
-              <h3>No more sample daters</h3>
-              <p>Open your likes from Profile or come back later for more people.</p>
+              <h3>No more daters right now</h3>
+              <p>Check back later or refresh the deck when new people are available.</p>
             </article>
           )}
         </section>
@@ -3503,6 +3536,8 @@ export default function App() {
     const nextLikedUserIds = profile?.likedUsers.includes(currentDater.id)
       ? profile.likedUsers
       : [...(profile?.likedUsers || []), currentDater.id];
+
+    let matchedOnThisLike = false;
 
     if (currentUser && profile) {
       const currentUserRef = db ? doc(db, 'users', currentUser.uid) : null;
@@ -3572,6 +3607,12 @@ export default function App() {
             };
             setProfile(matchedProfile);
             saveLocalProfile(currentUser.uid, matchedProfile);
+            setMatchedDaters((current) =>
+              current.some((dater) => dater.id === currentDater.id)
+                ? current
+                : [currentDater, ...current],
+            );
+            matchedOnThisLike = true;
             setStatus('It\'s a match!');
           } else if (currentUserRef) {
             await setDoc(
@@ -3594,9 +3635,11 @@ export default function App() {
     }
 
     setLikedDaters((current) =>
-      current.some((dater) => dater.id === currentDater.id)
-        ? current
-        : [...current, currentDater],
+      matchedOnThisLike
+        ? current.filter((dater) => dater.id !== currentDater.id)
+        : current.some((dater) => dater.id === currentDater.id)
+          ? current
+          : [...current, currentDater],
     );
     setSwipeIndex((current) => current + 1);
   };
@@ -3796,7 +3839,7 @@ export default function App() {
 
   if (screen === 'profile') {
     return renderFrame(
-      <div className="screen info-screen">
+      <div className="screen info-screen pref">
         <button className="back-button" onClick={handleBack} type="button">
           <img src={backArrrow} alt="Back Arrow" />
         </button>
@@ -4225,8 +4268,8 @@ export default function App() {
       <div className="screen info-screen">
         <img src={youreAllSetImg} alt="You're All Set!" />
         <img src={gatorImg} className="gator-set" alt="Gator" />
-        <div style={{ height: '15cqh' }} />
-        <button className="primary-button" type="button" onClick={handleContinueFromAllSet}>
+        <div style={{ height: '18cqh' }} />
+        <button className="primary-button all-set-continue" type="button" onClick={handleContinueFromAllSet}>
           Continue
         </button>
       </div>,
