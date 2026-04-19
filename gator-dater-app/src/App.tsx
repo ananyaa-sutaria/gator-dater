@@ -2946,6 +2946,7 @@ export default function App() {
 
   const renderTabContent = () => {
     if (activeTab === 'calendar') {
+      const plannedDateSet = new Set(calendarPlans.map((plan) => plan.date));
       const selectedCalendarDate = isSingleCalendarDate(calendarValue)
         ? formatCalendarDateValue(calendarValue)
         : formatCalendarDateValue(new Date());
@@ -2968,37 +2969,11 @@ export default function App() {
               <Calendar
                 onChange={setCalendarValue}
                 value={calendarValue}
-                tileClassName={({ date, view }) => {
-                  if (view !== 'month') {
-                    return undefined;
-                  }
-
-                  const dateKey = formatCalendarDateValue(date);
-                  const classes = [];
-
-                  if (dateKey === selectedCalendarDate) {
-                    classes.push('calendar-day-selected');
-                  }
-
-                  if (plannedDates.has(dateKey)) {
-                    classes.push('calendar-day-has-plan');
-                  }
-
-                  return classes.length ? classes.join(' ') : undefined;
-                }}
-                tileContent={({ date, view }) => {
-                  if (view !== 'month') {
-                    return null;
-                  }
-
-                  const dateKey = formatCalendarDateValue(date);
-
-                  if (!plannedDates.has(dateKey)) {
-                    return null;
-                  }
-
-                  return <span className="calendar-plan-dot" aria-hidden="true" />;
-                }}
+                tileClassName={({ date, view }) =>
+                  view === 'month' && plannedDateSet.has(formatCalendarDateValue(date))
+                    ? 'calendar-tile--planned'
+                    : undefined
+                }
               />
             </div>
           </section>
