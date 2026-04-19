@@ -3483,7 +3483,7 @@ export default function App() {
       });
       const nextPlannedDate = upcomingPlansForMonth[0] || null;
       const restOfMonthPlans = upcomingPlansForMonth.slice(1);
-      const plannedDates = new Set(calendarPlans.map((plan) => plan.date));
+      const plannedDateSet = new Set(calendarPlans.map((plan) => plan.date));
       const selectedCalendarMatchId = selectedCalendarPlan
         ? resolveCalendarPlanMatchId(selectedCalendarPlan)
         : '';
