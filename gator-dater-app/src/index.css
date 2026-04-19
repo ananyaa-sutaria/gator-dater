@@ -678,6 +678,7 @@ hr {
   gap: 0.6cqh;
   height: auto;
   min-height: 17cqw;
+  padding: 3cqw;
   text-align: left;
   background: var(--color-lightGreen) !important;
   color: black !important;

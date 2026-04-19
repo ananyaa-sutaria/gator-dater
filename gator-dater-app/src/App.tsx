@@ -2978,20 +2978,25 @@ export default function App() {
             </div>
           </section>
 
-          <section className="home-grid">
-            {plansForSelectedDay.length ? (
-              plansForSelectedDay.map((plan) => (
-                <article key={plan.id} className="home-tile">
-                  <h3 style={{ textDecoration: 'underline' }}>{plan.title}</h3>
-                  <p>{plan.place}</p>
-                  <p>With {plan.matchName} on {formatCalendarEntryLabel(plan.date)}</p>
-                </button>
-              ))
-            ) : (
-              <article className="home-tile">
-                <h3>No saved dates for this day</h3>
-                <p>Use the planner tab to generate 3 ideas, then add one to your calendar.</p>
-              </article>
+            <section className="home-grid">
+              {plansForSelectedDay.length ? (
+                plansForSelectedDay.map((plan) => (
+                  <button
+                    key={plan.id}
+                    className="home-tile calendar-plan-card"
+                    type="button"
+                    onClick={() => setSelectedCalendarPlan(plan)}
+                  >
+                    <h3 style={{ textDecoration: 'underline' }}>{plan.title}</h3>
+                    <p>{plan.place}</p>
+                    <p>With {plan.matchName} on {formatCalendarEntryLabel(plan.date)}</p>
+                  </button>
+                ))
+              ) : (
+                <article className="home-tile">
+                  <h3>No saved dates for this day</h3>
+                  <p>Use the planner tab to generate 3 ideas, then add one to your calendar.</p>
+                </article>
             )}
           </section>
           {selectedCalendarPlan ? (
