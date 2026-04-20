@@ -118,8 +118,29 @@ type CalendarPlan = {
   title: string;
   place: string;
   description: string;
+  matchId: string;
   matchName: string;
   date: string;
+};
+
+type CalendarInvite = {
+  id: string;
+  fromUserId: string;
+  fromUserName: string;
+  toUserId: string;
+  title: string;
+  place: string;
+  description: string;
+  date: string;
+  createdAt: number;
+};
+
+type CalendarInviteRemoval = {
+  id: string;
+  fromUserId: string;
+  toUserId: string;
+  planId: string;
+  createdAt: number;
 };
 
 type SignUpState = {
@@ -135,7 +156,7 @@ type SignInState = {
 type ProfileState = {
   firstName: string;
   lastName: string;
-  age: string;
+  birthDate: string;
   yearAtUf: string;
   bio: string;
   photoUrl: string;
@@ -179,6 +200,7 @@ type UserProfile = {
   fullName: string;
   name: string;
   age: number;
+  birthDate: string;
   yearAtUf: string;
   bio: string;
   gender: string;
@@ -219,7 +241,7 @@ const initialSignIn: SignInState = {
 const initialProfile: ProfileState = {
   firstName: '',
   lastName: '',
-  age: '',
+  birthDate: '',
   yearAtUf: '',
   bio: '',
   photoUrl: '',
@@ -519,6 +541,32 @@ const interestOptions = [
 
 const normalizeEmail = (email: string) => email.trim().toLowerCase();
 const isUflEmail = (email: string) => normalizeEmail(email).endsWith('@ufl.edu');
+const calculateAgeFromBirthDate = (birthDate: string) => {
+  if (!birthDate) {
+    return 18;
+  }
+
+  const birth = new Date(`${birthDate}T12:00:00`);
+
+  if (Number.isNaN(birth.getTime())) {
+    return 18;
+  }
+
+  const today = new Date();
+  let age = today.getFullYear() - birth.getFullYear();
+  const monthDifference = today.getMonth() - birth.getMonth();
+
+  if (monthDifference < 0 || (monthDifference === 0 && today.getDate() < birth.getDate())) {
+    age -= 1;
+  }
+
+  return age;
+};
+const getLatestAllowedBirthDate = () => {
+  const latest = new Date();
+  latest.setFullYear(latest.getFullYear() - 18);
+  return formatCalendarDateValue(latest);
+};
 const defaultPreferences: Preferences = {
   intention: 'either',
   genderIdentity: '',
@@ -649,7 +697,8 @@ const normalizeUserProfile = (rawProfile: Partial<UserProfile>, uid: string): Us
     lastName: rawProfile.lastName || '',
     fullName,
     name: rawProfile.name || fullName,
-    age: Number(rawProfile.age) || 18,
+    age: rawProfile.birthDate ? calculateAgeFromBirthDate(rawProfile.birthDate) : Number(rawProfile.age) || 18,
+    birthDate: rawProfile.birthDate || '',
     yearAtUf: rawProfile.yearAtUf || '',
     bio: rawProfile.bio || '',
     gender: rawProfile.gender || preferences.genderIdentity,
@@ -713,6 +762,7 @@ const buildFirestoreUserProfile = (nextProfile: UserProfile) => ({
   fullName: nextProfile.fullName,
   name: nextProfile.name,
   age: nextProfile.age,
+  birthDate: nextProfile.birthDate,
   yearAtUf: nextProfile.yearAtUf,
   bio: nextProfile.bio,
   email: nextProfile.email,
@@ -923,6 +973,169 @@ const formatCalendarEntryLabel = (date: string) =>
     month: 'long',
     day: 'numeric',
   });
+const normalizeComparableName = (value: string) => value.trim().toLowerCase();
+const normalizeCalendarPlan = (value: unknown): CalendarPlan | null => {
+  if (typeof value !== 'object' || value === null) {
+    return null;
+  }
+
+  const rawPlan = value as Record<string, unknown>;
+  const id = typeof rawPlan.id === 'string' ? rawPlan.id : '';
+  const title = typeof rawPlan.title === 'string' ? rawPlan.title : '';
+  const place = typeof rawPlan.place === 'string' ? rawPlan.place : '';
+  const description = typeof rawPlan.description === 'string' ? rawPlan.description : '';
+  const matchName = typeof rawPlan.matchName === 'string' ? rawPlan.matchName : '';
+  const matchId = typeof rawPlan.matchId === 'string' ? rawPlan.matchId : '';
+  const date = typeof rawPlan.date === 'string' ? rawPlan.date : '';
+
+  if (!id || !title || !date) {
+    return null;
+  }
+
+  return {
+    id,
+    title,
+    place,
+    description,
+    matchId,
+    matchName,
+    date,
+  };
+};
+const normalizeCalendarPlans = (value: unknown): CalendarPlan[] =>
+  Array.isArray(value)
+    ? value
+      .map((entry) => normalizeCalendarPlan(entry))
+      .filter((entry): entry is CalendarPlan => Boolean(entry))
+      .sort((left, right) => left.date.localeCompare(right.date))
+    : [];
+const upsertCalendarPlan = (plans: CalendarPlan[], nextPlan: CalendarPlan) => {
+  const withoutDuplicate = plans.filter((plan) => plan.id !== nextPlan.id);
+  return [...withoutDuplicate, nextPlan].sort((left, right) => left.date.localeCompare(right.date));
+};
+const removeCalendarPlan = (plans: CalendarPlan[], planId: string) =>
+  plans.filter((plan) => plan.id !== planId).sort((left, right) => left.date.localeCompare(right.date));
+/*
+const isCalendarDebugEnabled = () => {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+
+  const queryParamEnabled = new URLSearchParams(window.location.search).get('debugCalendar') === '1';
+  const localStorageEnabled = window.localStorage.getItem('calendar-debug') === '1';
+
+  return queryParamEnabled || localStorageEnabled;
+};
+const getFirestoreErrorMeta = (error: unknown) => {
+  const code =
+    typeof error === 'object' && error !== null && 'code' in error
+      ? String((error as { code?: unknown }).code)
+      : 'unknown';
+  const message = error instanceof Error ? error.message : 'Unknown Firestore error';
+
+  return { code, message };
+};
+const debugCalendar = (step: string, details?: unknown) => {
+  if (!isCalendarDebugEnabled()) {
+    return;
+  }
+
+  const timestamp = new Date().toISOString();
+
+  if (typeof details === 'undefined') {
+    console.log(`[calendar-debug ${timestamp}] ${step}`);
+    return;
+  }
+
+  console.log(`[calendar-debug ${timestamp}] ${step}`, details);
+};
+*/
+const getFirestoreErrorMeta = (_error: unknown) => ({
+  code: 'debug-disabled',
+  message: 'debug-disabled',
+});
+const debugCalendar = (_step: string, _details?: unknown) => {};
+const normalizeCalendarInvite = (value: unknown): CalendarInvite | null => {
+  if (typeof value !== 'object' || value === null) {
+    return null;
+  }
+
+  const rawInvite = value as Record<string, unknown>;
+  const id = typeof rawInvite.id === 'string' ? rawInvite.id : '';
+  const fromUserId = typeof rawInvite.fromUserId === 'string' ? rawInvite.fromUserId : '';
+  const fromUserName = typeof rawInvite.fromUserName === 'string' ? rawInvite.fromUserName : '';
+  const toUserId = typeof rawInvite.toUserId === 'string' ? rawInvite.toUserId : '';
+  const title = typeof rawInvite.title === 'string' ? rawInvite.title : '';
+  const place = typeof rawInvite.place === 'string' ? rawInvite.place : '';
+  const description = typeof rawInvite.description === 'string' ? rawInvite.description : '';
+  const date = typeof rawInvite.date === 'string' ? rawInvite.date : '';
+  const createdAt = typeof rawInvite.createdAt === 'number' ? rawInvite.createdAt : 0;
+
+  if (!id || !fromUserId || !toUserId || !title || !date) {
+    return null;
+  }
+
+  return {
+    id,
+    fromUserId,
+    fromUserName,
+    toUserId,
+    title,
+    place,
+    description,
+    date,
+    createdAt,
+  };
+};
+const normalizeCalendarInvites = (value: unknown): CalendarInvite[] =>
+  Array.isArray(value)
+    ? value
+      .map((entry) => normalizeCalendarInvite(entry))
+      .filter((entry): entry is CalendarInvite => Boolean(entry))
+      .sort((left, right) => left.createdAt - right.createdAt)
+    : [];
+const normalizeCalendarInviteRemoval = (value: unknown): CalendarInviteRemoval | null => {
+  if (typeof value !== 'object' || value === null) {
+    return null;
+  }
+
+  const rawRemoval = value as Record<string, unknown>;
+  const id = typeof rawRemoval.id === 'string' ? rawRemoval.id : '';
+  const fromUserId = typeof rawRemoval.fromUserId === 'string' ? rawRemoval.fromUserId : '';
+  const toUserId = typeof rawRemoval.toUserId === 'string' ? rawRemoval.toUserId : '';
+  const planId = typeof rawRemoval.planId === 'string' ? rawRemoval.planId : '';
+  const createdAt = typeof rawRemoval.createdAt === 'number' ? rawRemoval.createdAt : 0;
+
+  if (!id || !fromUserId || !toUserId || !planId) {
+    return null;
+  }
+
+  return {
+    id,
+    fromUserId,
+    toUserId,
+    planId,
+    createdAt,
+  };
+};
+const normalizeCalendarInviteRemovals = (value: unknown): CalendarInviteRemoval[] =>
+  Array.isArray(value)
+    ? value
+      .map((entry) => normalizeCalendarInviteRemoval(entry))
+      .filter((entry): entry is CalendarInviteRemoval => Boolean(entry))
+      .sort((left, right) => left.createdAt - right.createdAt)
+    : [];
+const isPermissionDeniedFirestoreError = (error: unknown) => {
+  if (typeof error !== 'object' || error === null) {
+    return false;
+  }
+
+  if ('code' in error && typeof (error as { code?: unknown }).code === 'string') {
+    return String((error as { code?: unknown }).code).includes('permission-denied');
+  }
+
+  return false;
+};
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>('intro');
@@ -963,12 +1176,15 @@ export default function App() {
     optionIndex: number;
     date: string;
   } | null>(null);
+  const [selectedCalendarPlan, setSelectedCalendarPlan] = useState<CalendarPlan | null>(null);
+  const [profilePreviewOpen, setProfilePreviewOpen] = useState(false);
   const plannerChatRef = useRef<HTMLDivElement | null>(null);
   const profilePhotoInputRef = useRef<HTMLInputElement | null>(null);
   //hehe calendar
   type ValuePiece = Date | null;
   type Value = ValuePiece | [ValuePiece, ValuePiece];
   const [calendarValue, setCalendarValue] = useState<Value>(new Date());
+  const [calendarViewDate, setCalendarViewDate] = useState<Date>(new Date());
   const profilePhotoFileRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
@@ -1015,7 +1231,7 @@ export default function App() {
           ...current,
           firstName: nextProfile.firstName || current.firstName,
           lastName: nextProfile.lastName || current.lastName,
-          age: String(nextProfile.age || current.age),
+          birthDate: nextProfile.birthDate || current.birthDate,
           yearAtUf: nextProfile.yearAtUf || current.yearAtUf,
           bio: nextProfile.bio || current.bio,
           photoUrl: nextProfile.photoUrl || user.photoURL || current.photoUrl,
@@ -1132,6 +1348,61 @@ export default function App() {
   }, [currentUser, profile]);
 
   useEffect(() => {
+    if (!currentUser) {
+      setCalendarPlans([]);
+      return;
+    }
+
+    if (!db) {
+      setCalendarPlans(loadLocalCalendarPlans(currentUser.uid));
+      return;
+    }
+
+    const calendarRef = doc(db, 'users', currentUser.uid, 'appData', 'calendar');
+    debugCalendar('subscribe user calendar snapshot', { uid: currentUser.uid });
+
+    const unsubscribe = onSnapshot(
+      calendarRef,
+      (snapshot) => {
+        const nextPlans = snapshot.exists()
+          ? normalizeCalendarPlans(snapshot.data()?.plans)
+          : loadLocalCalendarPlans(currentUser.uid);
+
+        debugCalendar('user calendar snapshot received', {
+          uid: currentUser.uid,
+          exists: snapshot.exists(),
+          planCount: nextPlans.length,
+          planIds: nextPlans.map((plan) => plan.id),
+        });
+
+        saveLocalCalendarPlans(currentUser.uid, nextPlans);
+        setCalendarPlans(nextPlans);
+        setFirestoreHealth('connected');
+      },
+      (calendarLoadError) => {
+        debugCalendar('user calendar snapshot error', {
+          uid: currentUser.uid,
+          ...getFirestoreErrorMeta(calendarLoadError),
+        });
+        setCalendarPlans(loadLocalCalendarPlans(currentUser.uid));
+
+        if (isOfflineFirestoreError(calendarLoadError)) {
+          setFirestoreHealth('fallback');
+          return;
+        }
+
+        setError(
+          calendarLoadError instanceof Error
+            ? calendarLoadError.message
+            : 'Unable to load your saved calendar plans right now.',
+        );
+      },
+    );
+
+    return () => unsubscribe();
+  }, [currentUser]);
+
+  useEffect(() => {
     if (!matchedDaters.length) {
       setSelectedMatchId('');
       return;
@@ -1143,6 +1414,139 @@ export default function App() {
         : '',
     );
   }, [matchedDaters]);
+
+  useEffect(() => {
+    if (!db || !currentUser || !matchedDaters.length) {
+      return;
+    }
+
+    const firestore = db;
+
+    const unsubscribers = matchedDaters.map((dater) => {
+      const conversationRef = doc(firestore, 'conversations', getConversationId(currentUser.uid, dater.id));
+      debugCalendar('subscribe conversation invite snapshot', {
+        currentUid: currentUser.uid,
+        matchUid: dater.id,
+        conversationId: getConversationId(currentUser.uid, dater.id),
+      });
+
+      return onSnapshot(
+        conversationRef,
+        async (snapshot) => {
+          if (!snapshot.exists()) {
+            debugCalendar('conversation snapshot missing', {
+              conversationId: getConversationId(currentUser.uid, dater.id),
+            });
+            return;
+          }
+
+          const incomingInvites = normalizeCalendarInvites(snapshot.data()?.calendarInvites)
+            .filter((invite) => invite.toUserId === currentUser.uid);
+          const incomingRemovals = normalizeCalendarInviteRemovals(snapshot.data()?.calendarInviteRemovals)
+            .filter((removal) => removal.toUserId === currentUser.uid);
+
+          debugCalendar('conversation snapshot received', {
+            conversationId: getConversationId(currentUser.uid, dater.id),
+            totalInviteCount: normalizeCalendarInvites(snapshot.data()?.calendarInvites).length,
+            incomingInviteCount: incomingInvites.length,
+            incomingInviteIds: incomingInvites.map((invite) => invite.id),
+            incomingRemovalCount: incomingRemovals.length,
+            incomingRemovalPlanIds: incomingRemovals.map((removal) => removal.planId),
+          });
+
+          if (!incomingInvites.length && !incomingRemovals.length) {
+            return;
+          }
+
+          const invitePlans: CalendarPlan[] = incomingInvites.map((invite) => ({
+            id: invite.id,
+            title: invite.title,
+            place: invite.place,
+            description: invite.description,
+            matchId: invite.fromUserId,
+            matchName: invite.fromUserName,
+            date: invite.date,
+          }));
+
+          let importedCount = 0;
+          let removedCount = 0;
+          let hasCalendarChanges = false;
+          let nextPlansToPersist: CalendarPlan[] = [];
+          const removalPlanIds = new Set(incomingRemovals.map((removal) => removal.planId));
+
+          setCalendarPlans((currentPlans) => {
+            let nextPlans = invitePlans.reduce((plans, invitePlan) => {
+              if (plans.some((plan) => plan.id === invitePlan.id)) {
+                return plans;
+              }
+
+              importedCount += 1;
+              return upsertCalendarPlan(plans, invitePlan);
+            }, currentPlans);
+
+            if (removalPlanIds.size) {
+              const filteredPlans = nextPlans.filter((plan) => !removalPlanIds.has(plan.id));
+              removedCount = nextPlans.length - filteredPlans.length;
+              nextPlans = filteredPlans;
+            }
+
+            if (!importedCount && !removedCount) {
+              return currentPlans;
+            }
+
+            hasCalendarChanges = true;
+            nextPlansToPersist = nextPlans;
+            return nextPlans;
+          });
+
+          if (!hasCalendarChanges) {
+            debugCalendar('invite/removal sync skipped (already up to date)', {
+              currentUid: currentUser.uid,
+              conversationId: getConversationId(currentUser.uid, dater.id),
+            });
+            return;
+          }
+
+          debugCalendar('invite/removal synced into recipient calendar state', {
+            currentUid: currentUser.uid,
+            importedCount,
+            removedCount,
+            planCount: nextPlansToPersist.length,
+          });
+
+          try {
+            await persistCalendarPlans(currentUser.uid, nextPlansToPersist);
+          } catch (calendarSaveError) {
+            debugCalendar('invite persist after import failed', {
+              currentUid: currentUser.uid,
+              ...getFirestoreErrorMeta(calendarSaveError),
+            });
+            setError(
+              calendarSaveError instanceof Error
+                ? calendarSaveError.message
+                : 'Unable to sync a shared date to your calendar right now.',
+            );
+          }
+        },
+        (conversationError) => {
+          debugCalendar('conversation invite snapshot error', {
+            currentUid: currentUser.uid,
+            conversationId: getConversationId(currentUser.uid, dater.id),
+            ...getFirestoreErrorMeta(conversationError),
+          });
+          setError(
+            conversationError instanceof Error
+              ? conversationError.message
+              : 'Unable to listen for shared calendar updates right now.',
+          );
+        },
+      );
+    });
+
+    return () => {
+      unsubscribers.forEach((unsubscribe) => unsubscribe());
+    };
+  }, [currentUser, matchedDaters]);
 
   useEffect(() => {
     if (!matchedDaters.length) {
@@ -1350,11 +1754,12 @@ export default function App() {
     });
   };
 
-  const handleConfirmCalendarSave = (
+  const handleConfirmCalendarSave = async (
     option: PlannerDateOption,
+    matchId: string,
     matchName: string,
   ) => {
-    if (!pendingCalendarSave?.date) {
+    if (!pendingCalendarSave?.date || !currentUser) {
       return;
     }
 
@@ -1363,18 +1768,80 @@ export default function App() {
       title: option.title,
       place: option.place,
       description: option.description,
+      matchId,
       matchName,
       date: pendingCalendarSave.date,
     };
 
-    setCalendarPlans((current) => {
-      const withoutDuplicate = current.filter((plan) => plan.id !== nextPlan.id);
-      return [...withoutDuplicate, nextPlan].sort((left, right) => left.date.localeCompare(right.date));
-    });
+    const nextPlans = upsertCalendarPlan(calendarPlans, nextPlan);
+
+    setCalendarPlans(nextPlans);
     setCalendarValue(new Date(`${pendingCalendarSave.date}T12:00:00`));
     setPendingCalendarSave(null);
     setActiveTab('calendar');
     setStatus(`Added "${option.title}" to your calendar.`);
+    debugCalendar('sender saved planner date (local state)', {
+      currentUid: currentUser.uid,
+      matchId,
+      planId: nextPlan.id,
+      date: nextPlan.date,
+      title: nextPlan.title,
+    });
+
+    let senderSaveError: unknown = null;
+
+    try {
+      await persistCalendarPlans(currentUser.uid, nextPlans);
+      debugCalendar('sender calendar persisted', {
+        currentUid: currentUser.uid,
+        planId: nextPlan.id,
+        planCount: nextPlans.length,
+      });
+    } catch (calendarSaveError) {
+      senderSaveError = calendarSaveError;
+      debugCalendar('sender calendar persist failed, continuing share flow', {
+        currentUid: currentUser.uid,
+        ...getFirestoreErrorMeta(calendarSaveError),
+      });
+    }
+
+    if (matchId && profile) {
+      const mirroredPlan: CalendarPlan = {
+        ...nextPlan,
+        matchId: currentUser.uid,
+        matchName: profile.fullName || currentUser.displayName || 'Your match',
+      };
+
+      debugCalendar('attempting shared calendar mirror', {
+        senderUid: currentUser.uid,
+        recipientUid: matchId,
+        planId: mirroredPlan.id,
+      });
+
+      try {
+        await persistSharedCalendarPlan(matchId, mirroredPlan);
+      } catch (shareSaveError) {
+        debugCalendar('shared calendar mirror flow failed', {
+          senderUid: currentUser.uid,
+          recipientUid: matchId,
+          ...getFirestoreErrorMeta(shareSaveError),
+        });
+        setError(
+          shareSaveError instanceof Error
+            ? shareSaveError.message
+            : 'Unable to sync this calendar plan with your match right now.',
+        );
+        return;
+      }
+    }
+
+    if (senderSaveError) {
+      setError(
+        senderSaveError instanceof Error
+          ? `Saved locally and shared, but your own Firestore calendar write failed: ${senderSaveError.message}`
+          : 'Saved locally and shared, but your own Firestore calendar write failed.',
+      );
+    }
   };
 
   const getLocalProfile = (uid: string) => {
@@ -1398,6 +1865,346 @@ export default function App() {
       getProfileStorageKey(uid),
       JSON.stringify(nextProfile),
     );
+  };
+  const getCalendarStorageKey = (uid: string) => `gator-dater-calendar:${uid}`;
+
+  const loadLocalCalendarPlans = (uid: string) => {
+    if (typeof window === 'undefined') {
+      return [] as CalendarPlan[];
+    }
+
+    try {
+      const storedPlans = window.localStorage.getItem(getCalendarStorageKey(uid));
+
+      if (!storedPlans) {
+        return [] as CalendarPlan[];
+      }
+
+      return normalizeCalendarPlans(JSON.parse(storedPlans) as unknown);
+    } catch {
+      return [];
+    }
+  };
+
+  const saveLocalCalendarPlans = (uid: string, plans: CalendarPlan[]) => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    window.localStorage.setItem(getCalendarStorageKey(uid), JSON.stringify(plans));
+  };
+  const resolveCalendarPlanMatchId = (plan: CalendarPlan) => {
+    if (plan.matchId && matchedDaters.some((dater) => dater.id === plan.matchId)) {
+      return plan.matchId;
+    }
+
+    const normalizedPlanName = normalizeComparableName(plan.matchName);
+    const matchedDater = matchedDaters.find(
+      (dater) => normalizeComparableName(dater.name) === normalizedPlanName,
+    );
+
+    return matchedDater?.id || '';
+  };
+
+  const loadUserCalendarPlans = async (uid: string) => {
+    const localPlans = loadLocalCalendarPlans(uid);
+
+    if (!db) {
+      return localPlans;
+    }
+
+    try {
+      const calendarDoc = await getDoc(doc(db, 'users', uid, 'appData', 'calendar'));
+
+      if (!calendarDoc.exists()) {
+        return localPlans;
+      }
+
+      const remotePlans = normalizeCalendarPlans(calendarDoc.data()?.plans);
+      saveLocalCalendarPlans(uid, remotePlans);
+      setFirestoreHealth('connected');
+      return remotePlans;
+    } catch (calendarLoadError) {
+      if (isOfflineFirestoreError(calendarLoadError)) {
+        setFirestoreHealth('fallback');
+        return localPlans;
+      }
+
+      throw calendarLoadError;
+    }
+  };
+
+  const persistCalendarPlans = async (uid: string, plans: CalendarPlan[]) => {
+    saveLocalCalendarPlans(uid, plans);
+
+    if (!db) {
+      return;
+    }
+
+    try {
+      await setDoc(
+        doc(db, 'users', uid, 'appData', 'calendar'),
+        {
+          plans,
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true },
+      );
+      debugCalendar('persistCalendarPlans success', {
+        uid,
+        planCount: plans.length,
+        planIds: plans.map((plan) => plan.id),
+      });
+      setFirestoreHealth('connected');
+    } catch (calendarSaveError) {
+      debugCalendar('persistCalendarPlans failed', {
+        uid,
+        ...getFirestoreErrorMeta(calendarSaveError),
+      });
+      if (isOfflineFirestoreError(calendarSaveError)) {
+        setFirestoreHealth('fallback');
+        return;
+      }
+
+      throw calendarSaveError;
+    }
+  };
+
+  const persistSharedCalendarPlan = async (uid: string, plan: CalendarPlan) => {
+    if (!db || !currentUser || !profile) {
+      return;
+    }
+
+    try {
+      debugCalendar('persistSharedCalendarPlan start', {
+        senderUid: currentUser.uid,
+        recipientUid: uid,
+        planId: plan.id,
+      });
+      const calendarRef = doc(db, 'users', uid, 'appData', 'calendar');
+      const calendarSnap = await getDoc(calendarRef);
+      const existingPlans = calendarSnap.exists()
+        ? normalizeCalendarPlans(calendarSnap.data()?.plans)
+        : [];
+      const nextPlans = upsertCalendarPlan(existingPlans, plan);
+
+      await setDoc(
+        calendarRef,
+        {
+          plans: nextPlans,
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true },
+      );
+      debugCalendar('persistSharedCalendarPlan success', {
+        senderUid: currentUser.uid,
+        recipientUid: uid,
+        planId: plan.id,
+        recipientPlanCount: nextPlans.length,
+      });
+    } catch (calendarSaveError) {
+      if (isPermissionDeniedFirestoreError(calendarSaveError)) {
+        debugCalendar('persistSharedCalendarPlan permission denied, using invite fallback', {
+          senderUid: currentUser.uid,
+          recipientUid: uid,
+          planId: plan.id,
+          ...getFirestoreErrorMeta(calendarSaveError),
+        });
+        await persistCalendarInvite(uid, plan);
+        return;
+      }
+
+      debugCalendar('persistSharedCalendarPlan failed', {
+        senderUid: currentUser.uid,
+        recipientUid: uid,
+        planId: plan.id,
+        ...getFirestoreErrorMeta(calendarSaveError),
+      });
+
+      if (isOfflineFirestoreError(calendarSaveError)) {
+        setFirestoreHealth('fallback');
+        return;
+      }
+
+      throw calendarSaveError;
+    }
+  };
+
+  const persistCalendarInvite = async (recipientUid: string, plan: CalendarPlan) => {
+    if (!db || !currentUser || !profile) {
+      return;
+    }
+
+    const conversationId = getConversationId(currentUser.uid, recipientUid);
+    const conversationRef = doc(db, 'conversations', conversationId);
+    debugCalendar('persistCalendarInvite start', {
+      senderUid: currentUser.uid,
+      recipientUid,
+      conversationId,
+      planId: plan.id,
+    });
+    const conversationSnap = await getDoc(conversationRef);
+    const existingInvites = conversationSnap.exists()
+      ? normalizeCalendarInvites(conversationSnap.data()?.calendarInvites)
+      : [];
+    const inviteId = `${plan.id}__${currentUser.uid}__${recipientUid}`;
+    const invite: CalendarInvite = {
+      id: inviteId,
+      fromUserId: currentUser.uid,
+      fromUserName: profile.fullName || currentUser.displayName || 'Your match',
+      toUserId: recipientUid,
+      title: plan.title,
+      place: plan.place,
+      description: plan.description,
+      date: plan.date,
+      createdAt: Date.now(),
+    };
+
+    const nextInvites = [
+      ...existingInvites.filter((existingInvite) => existingInvite.id !== inviteId),
+      invite,
+    ];
+
+    try {
+      await setDoc(
+        conversationRef,
+        {
+          participants: getConversationParticipantIds(currentUser.uid, recipientUid),
+          updatedAt: serverTimestamp(),
+          calendarInvites: nextInvites,
+        },
+        { merge: true },
+      );
+      debugCalendar('persistCalendarInvite success', {
+        senderUid: currentUser.uid,
+        recipientUid,
+        conversationId,
+        inviteId,
+        inviteCount: nextInvites.length,
+      });
+    } catch (inviteError) {
+      debugCalendar('persistCalendarInvite failed', {
+        senderUid: currentUser.uid,
+        recipientUid,
+        conversationId,
+        inviteId,
+        ...getFirestoreErrorMeta(inviteError),
+      });
+      throw inviteError;
+    }
+  };
+
+  const deleteSharedCalendarPlan = async (uid: string, planId: string) => {
+    if (!db || !currentUser) {
+      return;
+    }
+
+    try {
+      const calendarRef = doc(db, 'users', uid, 'appData', 'calendar');
+      const calendarSnap = await getDoc(calendarRef);
+      const existingPlans = calendarSnap.exists()
+        ? normalizeCalendarPlans(calendarSnap.data()?.plans)
+        : [];
+      const nextPlans = removeCalendarPlan(existingPlans, planId);
+
+      await setDoc(
+        calendarRef,
+        {
+          plans: nextPlans,
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true },
+      );
+    } catch (calendarDeleteError) {
+      if (isPermissionDeniedFirestoreError(calendarDeleteError)) {
+        await persistCalendarInviteRemoval(uid, planId);
+        return;
+      }
+
+      if (isOfflineFirestoreError(calendarDeleteError)) {
+        setFirestoreHealth('fallback');
+        return;
+      }
+
+      throw calendarDeleteError;
+    }
+  };
+
+  const persistCalendarInviteRemoval = async (recipientUid: string, planId: string) => {
+    if (!db || !currentUser) {
+      return;
+    }
+
+    const conversationId = getConversationId(currentUser.uid, recipientUid);
+    const conversationRef = doc(db, 'conversations', conversationId);
+    const conversationSnap = await getDoc(conversationRef);
+    const existingRemovals = conversationSnap.exists()
+      ? normalizeCalendarInviteRemovals(conversationSnap.data()?.calendarInviteRemovals)
+      : [];
+    const removalId = `${planId}__rm__${currentUser.uid}__${recipientUid}`;
+    const removalEvent: CalendarInviteRemoval = {
+      id: removalId,
+      fromUserId: currentUser.uid,
+      toUserId: recipientUid,
+      planId,
+      createdAt: Date.now(),
+    };
+    const nextRemovals = [
+      ...existingRemovals.filter((removal) => removal.id !== removalId),
+      removalEvent,
+    ];
+
+    await setDoc(
+      conversationRef,
+      {
+        participants: getConversationParticipantIds(currentUser.uid, recipientUid),
+        updatedAt: serverTimestamp(),
+        calendarInviteRemovals: nextRemovals,
+      },
+      { merge: true },
+    );
+  };
+
+  const handleDeleteCalendarPlan = async (plan: CalendarPlan) => {
+    if (!currentUser) {
+      return;
+    }
+
+    const nextPlans = removeCalendarPlan(calendarPlans, plan.id);
+    const mirroredMatchId = resolveCalendarPlanMatchId(plan);
+
+    setCalendarPlans(nextPlans);
+    setSelectedCalendarPlan(null);
+    setStatus(`Deleted "${plan.title}" from your calendar.`);
+
+    let senderDeleteError: unknown = null;
+
+    try {
+      await persistCalendarPlans(currentUser.uid, nextPlans);
+    } catch (calendarDeleteError) {
+      senderDeleteError = calendarDeleteError;
+    }
+
+    if (mirroredMatchId) {
+      try {
+        await deleteSharedCalendarPlan(mirroredMatchId, plan.id);
+      } catch (mirroredDeleteError) {
+        setError(
+          mirroredDeleteError instanceof Error
+            ? mirroredDeleteError.message
+            : 'Unable to sync this deletion with your match right now.',
+        );
+        return;
+      }
+    }
+
+    if (senderDeleteError) {
+      setError(
+        senderDeleteError instanceof Error
+          ? `Deleted locally and synced, but your own Firestore delete failed: ${senderDeleteError.message}`
+          : 'Deleted locally and synced, but your own Firestore delete failed.',
+      );
+    }
   };
 
   const readPhotoFile = (file: File) =>
@@ -1481,7 +2288,8 @@ export default function App() {
         `${profileForm.firstName.trim()} ${profileForm.lastName.trim()}`.trim() ||
         currentUser.displayName ||
         '',
-      age: profile?.age || Number(profileForm.age) || 18,
+      age: profileForm.birthDate ? calculateAgeFromBirthDate(profileForm.birthDate) : profile?.age || 18,
+      birthDate: profileForm.birthDate || profile?.birthDate || '',
       yearAtUf: profile?.yearAtUf || profileForm.yearAtUf || '',
       bio: profile?.bio || profileForm.bio || '',
       gender: profile?.gender || nextPreferences.genderIdentity,
@@ -1814,6 +2622,13 @@ export default function App() {
       return;
     }
 
+    const nextAge = calculateAgeFromBirthDate(profileForm.birthDate);
+
+    if (!profileForm.birthDate || nextAge < 18) {
+      setError('Enter a valid birthday for a user who is at least 18.');
+      return;
+    }
+
     setLoading(true);
     setError('');
 
@@ -1843,7 +2658,8 @@ export default function App() {
         lastName: profileForm.lastName.trim(),
         fullName,
         name: fullName,
-        age: Number(profileForm.age),
+        age: nextAge,
+        birthDate: profileForm.birthDate,
         yearAtUf: profileForm.yearAtUf,
         bio: profileForm.bio.trim(),
         gender: nextPreferences.genderIdentity,
@@ -1904,7 +2720,8 @@ export default function App() {
           lastName: profileForm.lastName.trim(),
           fullName,
           name: fullName,
-          age: Number(profileForm.age),
+          age: nextAge,
+          birthDate: profileForm.birthDate,
           yearAtUf: profileForm.yearAtUf,
           bio: profileForm.bio.trim(),
           gender: nextPreferences.genderIdentity,
@@ -1990,6 +2807,10 @@ export default function App() {
   const handleOpenPreferences = () => {
     setProfileForm((current) => ({
       ...current,
+      firstName: profile?.firstName || current.firstName,
+      lastName: profile?.lastName || current.lastName,
+      birthDate: profile?.birthDate || current.birthDate,
+      yearAtUf: profile?.yearAtUf || current.yearAtUf,
       bio: profile?.bio || current.bio,
       intention: profile?.preferences.intention || current.intention,
       genderIdentity: profile?.preferences.genderIdentity || current.genderIdentity,
@@ -2021,6 +2842,15 @@ export default function App() {
 
     const minAge = Number(profileForm.ageRangeMin);
     const maxAge = Number(profileForm.ageRangeMax);
+    const nextAge = profileForm.birthDate
+      ? calculateAgeFromBirthDate(profileForm.birthDate)
+      : profile?.age || 18;
+
+    if (!profileForm.birthDate || nextAge < 18) {
+      setError('Enter a valid birthday for a user who is at least 18.');
+      setLoading(false);
+      return;
+    }
 
     if (minAge < 18 || maxAge < 18 || minAge > maxAge) {
       setError('Choose a valid age range (minimum 18 and min <= max).');
@@ -2065,12 +2895,13 @@ export default function App() {
       '';
     const updatedProfile: UserProfile = {
       uid: currentUser.uid,
-      firstName: profile?.firstName || profileForm.firstName || '',
-      lastName: profile?.lastName || profileForm.lastName || '',
+      firstName: profileForm.firstName.trim() || profile?.firstName || '',
+      lastName: profileForm.lastName.trim() || profile?.lastName || '',
       fullName,
       name: fullName,
-      age: profile?.age || Number(profileForm.age) || 18,
-      yearAtUf: profile?.yearAtUf || profileForm.yearAtUf || '',
+      age: nextAge,
+      birthDate: profileForm.birthDate || profile?.birthDate || '',
+      yearAtUf: profileForm.yearAtUf || profile?.yearAtUf || '',
       bio: profileForm.bio.trim() || profile?.bio || '',
       gender: nextPreferences.genderIdentity,
       genderPreference: nextPreferences.genderPreference,
@@ -2568,6 +3399,9 @@ export default function App() {
     setLikedDaters([]);
     setMatchesModalOpen(false);
     setMatchedDaters([]);
+    setCalendarPlans([]);
+    setSelectedCalendarPlan(null);
+    setProfilePreviewOpen(false);
     setSelectedMatchId('');
     setChatDraft('');
     setChatMessages([]);
@@ -2621,12 +3455,40 @@ export default function App() {
 
   const renderTabContent = () => {
     if (activeTab === 'calendar') {
+      const selectedCalendarValue = isSingleCalendarDate(calendarValue) ? calendarValue : new Date();
       const selectedCalendarDate = isSingleCalendarDate(calendarValue)
         ? formatCalendarDateValue(calendarValue)
         : formatCalendarDateValue(new Date());
       const plansForSelectedDay = calendarPlans.filter((plan) =>
         isSameCalendarDay(plan.date, selectedCalendarDate),
       );
+      const selectedDayPrimaryPlan = plansForSelectedDay[0] || null;
+      const todayCalendarDate = formatCalendarDateValue(new Date());
+      const selectedMonthStart = new Date(
+        selectedCalendarValue.getFullYear(),
+        selectedCalendarValue.getMonth(),
+        1,
+      );
+      const selectedMonthEnd = new Date(
+        selectedCalendarValue.getFullYear(),
+        selectedCalendarValue.getMonth() + 1,
+        0,
+      );
+      const monthLabel = selectedCalendarValue.toLocaleDateString([], {
+        month: 'long',
+        year: 'numeric',
+      });
+      const upcomingPlansForMonth = calendarPlans.filter((plan) => {
+        const planDate = new Date(`${plan.date}T12:00:00`);
+        return planDate >= selectedMonthStart && planDate <= selectedMonthEnd && plan.date >= todayCalendarDate;
+      });
+      const nextPlannedDate = upcomingPlansForMonth[0] || null;
+      const restOfMonthPlans = upcomingPlansForMonth.slice(1);
+      const plannedDateSet = new Set(calendarPlans.map((plan) => plan.date));
+      const selectedCalendarMatchId = selectedCalendarPlan
+        ? resolveCalendarPlanMatchId(selectedCalendarPlan)
+        : '';
+      const canOpenChatForSelectedPlan = Boolean(selectedCalendarMatchId);
 
       return (
         <>
@@ -2635,20 +3497,39 @@ export default function App() {
 
             <div>
               {/* className="calendar-grid"> */}
-              <Calendar onChange={setCalendarValue} value={calendarValue} />
+              <Calendar
+                onChange={setCalendarValue}
+                value={calendarValue}
+                onActiveStartDateChange={({ activeStartDate }) => activeStartDate && setCalendarViewDate(activeStartDate)}
+                tileClassName={({ date, view }) => {
+                  const classes = [];
+                  if (view === 'month') {
+                    if (plannedDateSet.has(formatCalendarDateValue(date))) {
+                      classes.push('calendar-tile--planned');
+                    }
+                    if (date.getMonth() !== calendarViewDate.getMonth()) {
+                      classes.push('calendar-tile--neighboring-month');
+                    }
+                  }
+                  return classes;
+                }}
+              />
             </div>
           </section>
 
           <section className="home-grid">
-            {plansForSelectedDay.length ? (
-              plansForSelectedDay.map((plan) => (
-                <article key={plan.id} className="home-tile">
-                  <h3 style={{ textDecoration: 'underline' }}>{plan.title}</h3>
-                  <p>{plan.place}</p>
-                  <p>With {plan.matchName} on {formatCalendarEntryLabel(plan.date)}</p>
-                  <p>{plan.description}</p>
-                </article>
-              ))
+            {selectedDayPrimaryPlan ? (
+              <button
+                key={selectedDayPrimaryPlan.id}
+                className="home-tile calendar-plan-card calendar-selected-plan"
+                type="button"
+                onClick={() => setSelectedCalendarPlan(selectedDayPrimaryPlan)}
+              >
+                <h3>{selectedDayPrimaryPlan.title}</h3>
+                <p>With {selectedDayPrimaryPlan.matchName} on {formatCalendarEntryLabel(selectedDayPrimaryPlan.date)}</p>
+                <p>{selectedDayPrimaryPlan.place}</p>
+                <p>{selectedDayPrimaryPlan.description}</p>
+              </button>
             ) : (
               <article className="home-tile">
                 <h3>No saved dates for this day</h3>
@@ -2656,6 +3537,99 @@ export default function App() {
               </article>
             )}
           </section>
+
+          {!selectedDayPrimaryPlan ? (
+            <section className="home-grid calendar-upcoming-list">
+              <article className="home-tile">
+                <h3>Upcoming in {monthLabel}</h3>
+                {nextPlannedDate ? (
+                  <>
+                    <p className="account-label">Next date planned</p>
+                    <button
+                      className="home-tile calendar-plan-card calendar-next-plan"
+                      type="button"
+                      onClick={() => setSelectedCalendarPlan(nextPlannedDate)}
+                    >
+                      <h3>{nextPlannedDate.title}</h3>
+                      <p>With {nextPlannedDate.matchName} on {formatCalendarEntryLabel(nextPlannedDate.date)}</p>
+                      <p>{nextPlannedDate.place}</p>
+                      <p>{nextPlannedDate.description}</p>
+                    </button>
+                  </>
+                ) : (
+                  <p>No more dates planned for the rest of this month.</p>
+                )}
+              </article>
+
+              {restOfMonthPlans.length ? (
+                <article className="home-tile">
+                  <h3>Rest of month</h3>
+                  <div className="calendar-month-list">
+                    {restOfMonthPlans.map((plan) => (
+                      <button
+                        key={`month-${plan.id}`}
+                        className="home-tile calendar-plan-card"
+                        type="button"
+                        onClick={() => setSelectedCalendarPlan(plan)}
+                      >
+                        <h3>{plan.title}</h3>
+                        <p>With {plan.matchName} on {formatCalendarEntryLabel(plan.date)}</p>
+                        <p>{plan.place}</p>
+                      </button>
+                    ))}
+                  </div>
+                </article>
+              ) : null}
+            </section>
+          ) : null}
+
+          {selectedCalendarPlan ? (
+            <div className="likes-modal" onClick={() => setSelectedCalendarPlan(null)}>
+              <div
+                className="likes-modal-card calendar-plan-modal"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <div className="likes-modal-header">
+                  <h2>{selectedCalendarPlan.title}</h2>
+                  <button className="link-button" type="button" onClick={() => setSelectedCalendarPlan(null)}>
+                    Close
+                  </button>
+                </div>
+                <div className="calendar-plan-modal-body">
+                  <p><strong>With:</strong> {selectedCalendarPlan.matchName}</p>
+                  <p><strong>Date:</strong> {formatCalendarEntryLabel(selectedCalendarPlan.date)}</p>
+                  <p><strong>Place:</strong> {selectedCalendarPlan.place}</p>
+                  <p>{selectedCalendarPlan.description}</p>
+                  <button
+                    className="primary-button tile-button"
+                    type="button"
+                    disabled={!canOpenChatForSelectedPlan}
+                    onClick={() => {
+                      if (!selectedCalendarMatchId) {
+                        return;
+                      }
+
+                      setSelectedMatchId(selectedCalendarMatchId);
+                      setSelectedCalendarPlan(null);
+                      setActiveTab('chats');
+                    }}
+                  >
+                    Go to chat
+                  </button>
+                  <button
+                    className="secondary-button tile-button"
+                    type="button"
+                    onClick={() => void handleDeleteCalendarPlan(selectedCalendarPlan)}
+                  >
+                    Delete date
+                  </button>
+                  {!canOpenChatForSelectedPlan ? (
+                    <p className="account-detail">Chat is only available for active mutual matches.</p>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+          ) : null}
         </>
       );
     }
@@ -2773,6 +3747,7 @@ export default function App() {
                                   onClick={() =>
                                     handleConfirmCalendarSave(
                                       option,
+                                      selectedPlannerMatch?.id || '',
                                       selectedPlannerMatch?.name || 'your match',
                                     )
                                   }
@@ -2933,6 +3908,21 @@ export default function App() {
     }
 
     if (activeTab === 'profile-tab') {
+      const selfPreviewDater: Dater = {
+        id: currentUser?.uid || 'self-preview',
+        name: profile?.fullName || currentUser?.displayName || 'User',
+        age: profile?.age || 18,
+        yearAtUf: profile?.yearAtUf || 'UF Student',
+        bio: profile?.bio || 'Add a bio so other users can get to know you.',
+        compatibility: 100,
+        vibe: profile?.preferences.vibeWords?.[0] || profile?.dateVibe?.[0] || 'Good energy',
+        interests: profile?.interests || [],
+        dateBudget: profile?.dateBudget || 'low',
+        dateVibe: profile?.dateVibe || [],
+        availability: profile?.availability || [],
+        photoUrl: activeProfilePhoto,
+      };
+
       return (
         <>
           <section className="intro-profile-panel">
@@ -2942,11 +3932,15 @@ export default function App() {
                   src={activeProfilePhoto}
                   alt={`${profile?.fullName || currentUser?.displayName || 'User'} profile`}
                   className="profile-photo"
+                  onClick={() => setProfilePreviewOpen(true)}
                 />
                 <button
                   className="profile-photo-edit-button"
                   type="button"
-                  onClick={() => profilePhotoInputRef.current?.click()}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    profilePhotoInputRef.current?.click();
+                  }}
                   aria-label="Edit profile photo"
                 >
                   <img src={writeImg} alt="" className="profile-photo-edit-icon" />
@@ -2963,11 +3957,45 @@ export default function App() {
               onChange={handleProfilePhotoUpdate}
             />
           </section>
+          {profilePreviewOpen ? (
+            <div className="likes-modal" onClick={() => setProfilePreviewOpen(false)}>
+              <div
+                className="likes-modal-card profile-preview-modal"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <div className="likes-modal-header">
+                  <h2>Profile Preview</h2>
+                  <button className="link-button" type="button" onClick={() => setProfilePreviewOpen(false)}>
+                    Close
+                  </button>
+                </div>
+                <section className="swipe-stack profile-preview-stack">
+                  <article
+                    className="swipe-card profile-preview-swipe-card"
+                    style={{
+                      backgroundImage: selfPreviewDater.photoUrl ? `url(${selfPreviewDater.photoUrl})` : 'none',
+                    }}
+                  >
+                    <div className="swipe-overlay">
+                      <p>{selfPreviewDater.compatibility}% match</p>
+                      <h2>
+                        {selfPreviewDater.name}, {selfPreviewDater.age}
+                      </h2>
+                      <p>{selfPreviewDater.yearAtUf}</p>
+                      <p className="swipe-vibe">{selfPreviewDater.vibe}</p>
+                      <p>{selfPreviewDater.bio}</p>
+                    </div>
+                  </article>
+                </section>
+              </div>
+            </div>
+          ) : null}
           <section className="home-grid">
             <article className="profile-tile">
               <h3 style={{ textDecoration: 'underline' }}>About Me</h3>
               <p>{profile?.yearAtUf || 'UF Student'}</p>
               <p>{profile?.age ? `${profile.age} years old` : '*Add more details to make matching better.*'}</p>
+              <p>{profile?.birthDate ? `Birthday: ${formatCalendarEntryLabel(profile.birthDate)}` : '*Add your birthday*'}</p>
               <p>{profile?.bio || '*Add a bio so people can get to know you.*'}</p>
               <p>Intent: {profile?.intention || 'Open'}</p>
               <h3 style={{ textDecoration: 'underline' }}>My Preferences</h3>
@@ -2981,7 +4009,7 @@ export default function App() {
                 type="button"
                 onClick={handleOpenPreferences}
               >
-                Edit Preferences
+                Edit Profile & Preferences
               </button>
             </article>
 
@@ -3429,16 +4457,14 @@ export default function App() {
             required
           />
           <label>
-            What's your age?
+            What's your birthday?
             <input
-              type="number"
-              min="18"
-              max="99"
-              value={profileForm.age}
+              type="date"
+              max={getLatestAllowedBirthDate()}
+              value={profileForm.birthDate}
               onChange={(event) =>
-                setProfileForm((current) => ({ ...current, age: event.target.value }))
+                setProfileForm((current) => ({ ...current, birthDate: event.target.value }))
               }
-              placeholder="Age"
               required
             />
           </label>
@@ -3509,6 +4535,40 @@ export default function App() {
         <form className="auth-form" onSubmit={handlePreferencesSave}>
           {preferencesSection === 'preferences' ? (
             <>
+              <label>
+                Birthday
+                <input
+                  type="date"
+                  max={getLatestAllowedBirthDate()}
+                  value={profileForm.birthDate}
+                  onChange={(event) =>
+                    setProfileForm((current) => ({ ...current, birthDate: event.target.value }))
+                  }
+                  required
+                />
+              </label>
+              <p className="account-detail">
+                {profileForm.birthDate
+                  ? `Current age: ${calculateAgeFromBirthDate(profileForm.birthDate)}`
+                  : 'Your age will be calculated automatically from your birthday.'}
+              </p>
+              <label>
+                Year at UF
+                <select
+                  className="preferences-select"
+                  value={profileForm.yearAtUf}
+                  onChange={(event) =>
+                    setProfileForm((current) => ({ ...current, yearAtUf: event.target.value }))
+                  }
+                >
+                  <option value="">Select your year</option>
+                  {yearOptions.map((year) => (
+                    <option key={year} value={year}>
+                      {year}
+                    </option>
+                  ))}
+                </select>
+              </label>
               <label>
                 Dating Intention
                 <select
