@@ -246,6 +246,7 @@ p, label, input {
   background: white;
   border: 1px solid #ccc;
   border-radius: 8px;
+  box-shadow: 0 20px 25px -5px var(--color-lightBlue), 0 10px 10px -5px var(--color-lightBlue);
   font-family: Arial, sans-serif;
 }
 
@@ -283,6 +284,16 @@ p, label, input {
   height: 6px;
   border-radius: 50%;
   background: var(--color-green);
+}
+
+.react-calendar__tile.calendar-tile--neighboring-month {
+  color: #ccc !important;
+}
+
+/* Add grid lines to calendar */
+.react-calendar__month-view__days .react-calendar__tile {
+  border-right: 1px solid var(--color-lightBlue);
+  border-bottom: 1px solid var(--color-lightBlue);
 }
 
 .react-calendar__tile--now.calendar-tile--planned::after {

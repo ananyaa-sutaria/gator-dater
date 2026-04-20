@@ -1184,6 +1184,7 @@ export default function App() {
   type ValuePiece = Date | null;
   type Value = ValuePiece | [ValuePiece, ValuePiece];
   const [calendarValue, setCalendarValue] = useState<Value>(new Date());
+  const [calendarViewDate, setCalendarViewDate] = useState<Date>(new Date());
   const profilePhotoFileRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
@@ -3499,11 +3500,19 @@ export default function App() {
               <Calendar
                 onChange={setCalendarValue}
                 value={calendarValue}
-                tileClassName={({ date, view }) =>
-                  view === 'month' && plannedDateSet.has(formatCalendarDateValue(date))
-                    ? 'calendar-tile--planned'
-                    : undefined
-                }
+                onActiveStartDateChange={({ activeStartDate }) => activeStartDate && setCalendarViewDate(activeStartDate)}
+                tileClassName={({ date, view }) => {
+                  const classes = [];
+                  if (view === 'month') {
+                    if (plannedDateSet.has(formatCalendarDateValue(date))) {
+                      classes.push('calendar-tile--planned');
+                    }
+                    if (date.getMonth() !== calendarViewDate.getMonth()) {
+                      classes.push('calendar-tile--neighboring-month');
+                    }
+                  }
+                  return classes;
+                }}
               />
             </div>
           </section>
